@@ -192,9 +192,9 @@ SecureEvidence/
 ## 🙏 Acknowledgments & Special Thanks
 
 I would like to express my sincere gratitude and appreciation to:
-* **Information Network Security Administration (INSA)**: For inspiring this project, defining the real-world context of national cybersecurity challenges in Ethiopia, and fostering technological innovation.
-* **My Mentors and Instructors**: For their invaluable guidance, deep technical mentorship, and continuous support across Artificial Intelligence, Big Data engineering, and Blockchain systems throughout this journey.
-* **Ethiopian Critical Infrastructure Institutions**: Whose cybersecurity resilience inspired the real-world scenarios modeled in this system (Ethio Telecom, Commercial Bank of Ethiopia, and the National Bank of Ethiopia).
+* **Information Network Security Administration (INSA)**: For hosting the summer camp program, inspiring this project, and fostering technological innovation in national cyber defense.
+* **INSA Summer Camp Crew & Staff**: For their dedication, tireless coordination, and providing an exceptional environment for advanced technical learning.
+* **My Mentors**: A heartfelt thank you to **Mikiyas**, **Abreham**, **Inas**, **Hanamariam**, and **Selam** for their invaluable guidance, constructive critiques, and continuous mentorship across Artificial Intelligence, Big Data engineering, and Blockchain systems throughout this journey.
 
 ---
 
