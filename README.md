@@ -106,6 +106,44 @@ Any 1-bit alteration in captured evidence immediately triggers a cryptographic h
 
 ---
 
+## 📸 Platform Walkthrough & Screenshots
+
+### 1. Role-Based Access Control & Authentication
+Seamless role separation allowing investigators to analyze and anchor evidence while system administrators manage audit trails and governance. Includes one-click quick-fill demo access for evaluation.
+![Role-Based Authentication](docs/screenshots/01_role_based_access.png)
+
+---
+
+### 2. AI Threat Triage & TreeSHAP Feature Explainability
+Production 12-class XGBoost classifier evaluating network flow telemetry with dynamic TreeSHAP attributions showing the exact statistical features driving the threat diagnosis.
+![AI Threat Triage and Explainability](docs/screenshots/02_threat_triage_and_explainability.png)
+
+---
+
+### 3. Blockchain & Cryptographic Evidence Anchoring
+Digital evidence sealing using deterministic SHA-256 canonical hashing, Merkle tree proofs, and officer ECDSA digital signatures anchored to the EVM smart contract and verifiable hash-chain ledger.
+![Blockchain Evidence Anchoring](docs/screenshots/03_blockchain_evidence_anchoring.png)
+
+---
+
+### 4. High-Throughput Big Data Streaming Pipeline
+High-speed telemetry processing architecture utilizing Apache Spark Structured Streaming and Kafka event brokers, demonstrating 1-minute sliding window statistics and live anomaly detection.
+![Big Data Streaming Telemetry](docs/screenshots/04_big_data_streaming_pipeline.png)
+
+---
+
+### 5. Cryptographic Tamper Detection & Avalanche Rejection
+The built-in verification engine proves non-repudiation: altering even a single byte or packet metric in the seized evidence instantly causes a cryptographic hash mismatch.
+![Cryptographic Tamper Detection](docs/screenshots/05_cryptographic_tamper_detection.png)
+
+---
+
+### 6. FDRE Federal High Court Digital Evidence Certificate
+Official court certificate generator providing judicial authorities with verifiable chain-of-custody records, transaction hashes, and statutory citations under Ethiopian Proclamation No. 958/2016.
+![Federal High Court Evidence Certificate](docs/screenshots/06_court_evidence_certificate.png)
+
+---
+
 ## 🚀 Quick Start (Local Setup)
 
 ### 1. Clone & Set Up Environment
