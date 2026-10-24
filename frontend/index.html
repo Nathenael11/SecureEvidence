@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureEvidence — INSA Forensics Console (Prototype)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/styles.css?v=20261019_v8">
+    <link rel="stylesheet" href="/static/css/theme-navy-steel.css?v=20261019_v8">
+</head>
+<body>
+
+
+    <!-- Header -->
+    <header class="app-header">
+        <div class="header-left">
+            <button type="button" class="btn-sidebar-toggle" id="btn-sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle Navigation">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="insa-brand">
+                <img src="/static/images/insa-logo-light.png" alt="INSA Logo" class="brand-logo" onerror="this.src='/static/images/insa-logo.png'">
+                <span class="agency-title" id="agency_title" style="display:none">INSA</span>
+                <span class="agency-subtitle" id="agency_subtitle" style="display:none">Information Network Security Administration</span>
+            </div>
+            <div class="project-tag">
+                <span class="project-title" id="project_title">SecureEvidence</span>
+                <span class="system-mode" id="system_mode">Digital Forensics &amp; Evidence Registry</span>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <!-- User chip + sign-in -->
+            <span class="badge-status font-mono" id="chip-ledger-type" style="font-size:0.75rem;background:rgba(255,255,255,0.08);color:#d0e2ff;border:1px solid rgba(255,255,255,0.18);padding:4px 8px;border-radius:4px;margin-right:8px;">Ledger: SQLite, hash-chained</span>
+            <div id="user-chip-container" style="display:flex;align-items:center;gap:8px;">
+                <div id="user-chip" class="status-pill hidden">
+                    <i class="fa-solid fa-user-shield text-amber"></i>
+                    <span id="user-chip-name" style="font-weight:600;"></span>
+                    <span id="user-chip-role" class="badge-status" style="font-size:10px;margin-left:4px;"></span>
+                    <button type="button" class="btn-lang-toggle" style="padding:2px 6px;font-size:11px;margin-left:6px;"
+                            onclick="handleLogout()" title="Sign out">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </div>
+                <button type="button" class="btn btn-login-pill" id="btn-open-login"
+                        onclick="openLoginModal()">
+                    <i class="fa-solid fa-lock"></i> <span id="lbl-btn-login">Sign in</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- App Shell: Side Section + Main Content -->
+    <div class="app-shell">
+
+        <!-- Professional Side Navigation -->
+        <aside class="app-sidebar" id="app-sidebar">
+            <div>
+                <div class="sidebar-brand-section">
+                    <div class="sidebar-agency-title">SecureEvidence</div>
+                    <div class="sidebar-console-title">Forensic Operations</div>
+                </div>
+
+                <nav class="sidebar-nav">
+                    <button type="button" class="sidebar-item active" id="nav-item-threat-triage" onclick="switchNavTab('threat-triage')">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>Threat Triage</span>
+                    </button>
+                    <button type="button" class="sidebar-item" id="nav-item-live-stream" onclick="switchNavTab('live-stream')">
+                        <i class="fa-solid fa-tower-broadcast"></i>
+                        <span>Live Stream</span>
+                    </button>
+                    <button type="button" class="sidebar-item" id="nav-item-integrity-verify" onclick="switchNavTab('integrity-verify')">
+                        <i class="fa-solid fa-fingerprint"></i>
+                        <span>Integrity Verify</span>
+                    </button>
+                    <button type="button" class="sidebar-item" id="nav-item-certificate" onclick="openCertificatePicker()">
+                        <i class="fa-solid fa-file-shield"></i>
+                        <span>Certificate</span>
+                    </button>
+                    <button type="button" class="sidebar-item" id="nav-item-public-verify" onclick="switchNavTab('public-verify')">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <span>Public Verifier</span>
+                    </button>
+                    <button type="button" class="sidebar-item" id="nav-item-ledger-registry" onclick="switchNavTab('ledger-registry')">
+                        <i class="fa-solid fa-database"></i>
+                        <span>Evidence Ledger</span>
+                    </button>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="app-content">
+            <main class="main-container">
+
+        <!-- Stat cards -->
+        <section class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-label" id="lbl-metric-events">Ingested flow events</span>
+                    <i class="fa-solid fa-chart-line metric-icon text-secondary"></i>
+                </div>
+                <div class="metric-value metric-neutral" id="stat-events-count">0</div>
+                <div class="metric-footer" id="lbl-metric-events-sub">scored since stream start</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-label" id="lbl-metric-threats">Threats identified</span>
+                    <i class="fa-solid fa-triangle-exclamation metric-icon text-secondary"></i>
+                </div>
+                <div class="metric-value metric-neutral" id="stat-threats-count">0</div>
+                <div class="metric-footer" id="lbl-metric-threats-sub">scored since stream start</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-label" id="lbl-metric-blocks">Ledger records</span>
+                    <i class="fa-solid fa-cubes metric-icon text-secondary"></i>
+                </div>
+                <div class="metric-value metric-neutral" id="stat-blocks-count">0</div>
+                <div class="metric-footer" id="lbl-metric-blocks-sub">Anchored records</div>
+            </div>
+        </section>
+
+        <div id="toast-container" class="toast-container"></div>
+
+        <!-- Tab Pane 1: Threat Triage (Default) -->
+        <div class="nav-tab-pane" id="pane-tab-threat-triage">
+            <!-- Workbench -->
+            <div class="workbench-grid">
+
+                <!-- Left: Input -->
+                <div class="workbench-card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fa-solid fa-network-wired"></i>
+                            <span>Network Flow Telemetry</span>
+                        </div>
+                        <span class="badge-status">CICIDS2017</span>
+                    </div>
+
+                    <div class="card-body">
+                        <!-- Tabs (no icons) -->
+                        <div class="tab-container">
+                            <button type="button" class="tab-btn active" id="tab-flow-btn" onclick="switchIngestTab('flow')">
+                                <span id="lbl-tab-flow">Flow features</span>
+                            </button>
+                            <button type="button" class="tab-btn" id="tab-suricata-btn" onclick="switchIngestTab('suricata')">
+                                <span id="lbl-tab-suricata">Suricata EVE JSON</span>
+                            </button>
+                        </div>
+
+                        <!-- Suricata pane -->
+                        <div id="pane-suricata" style="display:none;margin-bottom:16px;">
+                            <label class="section-label" id="lbl-suricata-input">Synthetic EVE-style sample (demo, RFC 5737 IPs):</label>
+                            <textarea id="suricata-json-input" class="json-editor font-mono" rows="6"
+                                placeholder='{"event_type":"flow","src_ip":"198.51.100.45","dest_ip":"192.0.2.1","flow":{"pkts_toserver":1500,"bytes_toserver":96000,"age":1},"tcp":{"syn":true}}'></textarea>
+                            <button type="button" class="btn btn-secondary" style="margin-top:8px;width:100%;" onclick="handleIngestSuricata()">
+                                <i class="fa-solid fa-file-import"></i>
+                                <span id="lbl-btn-ingest-suricata">Parse and ingest Suricata event</span>
+                            </button>
+                        </div>
+
+                        <div id="pane-flow">
+                            <!-- Preset buttons — no icons, real class names -->
+                            <div class="preset-group">
+                                <label class="section-label" id="lbl-preset-scenarios">Sample data (CICIDS2017, pre-captured):</label>
+                                <div class="preset-btn-container">
+                                    <button type="button" class="btn-preset active" onclick="loadScenario('dos_hulk')">
+                                        <span>DoS Hulk</span>
+                                    </button>
+                                    <button type="button" class="btn-preset" onclick="loadScenario('ddos')">
+                                        <span>DDoS</span>
+                                    </button>
+                                    <button type="button" class="btn-preset" onclick="loadScenario('botnet')">
+                                        <span>PortScan</span>
+                                    </button>
+                                    <button type="button" class="btn-preset" onclick="loadScenario('sqli')">
+                                        <span>Web Attack</span>
+                                    </button>
+                                    <button type="button" class="btn-preset" onclick="loadScenario('brute_force')">
+                                        <span>SSH-Patator</span>
+                                    </button>
+                                    <button type="button" class="btn-preset" onclick="loadScenario('benign')">
+                                        <span>Benign</span>
+                                    </button>
+                                    <button type="button" class="btn-preset" onclick="loadScenario('disagreement')">
+                                        <span>Dispute / Model Miss</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Flow form -->
+                            <form id="flow-form" onsubmit="handleDetectThreat(event)">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="field-label">Target asset</label>
+                                        <select id="target_asset" class="form-control">
+                                            <option value="National-Gateway-Demo-01" selected>National-Gateway-Demo-01</option>
+                                            <option value="Commercial-Core-Switch-02">Commercial-Core-Switch-02</option>
+                                            <option value="Central-Interbank-Switch-01">Central-Interbank-Switch-01</option>
+                                            <option value="Sensor-Node-Alpha">Sensor-Node-Alpha</option>
+                                            <option value="Public-Web-DMZ">Public-Web-DMZ</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="field-label">Flow duration (µs)</label>
+                                        <input type="number" step="0.1" id="flow_duration" class="form-control" value="1200.0">
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="field-label">Source IP</label>
+                                        <input type="text" id="source_ip" class="form-control font-mono" value="198.51.100.45">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="field-label">Destination IP</label>
+                                        <input type="text" id="destination_ip" class="form-control font-mono" value="192.0.2.1">
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="field-label">Flow packets / sec</label>
+                                        <input type="number" step="0.1" id="flow_packets_s" class="form-control" value="3850.0">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="field-label">Flow bytes / sec</label>
+                                        <input type="number" step="0.1" id="flow_bytes_s" class="form-control" value="1850000.0">
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="field-label">Total fwd packets</label>
+                                        <input type="number" id="total_fwd_packets" class="form-control" value="850">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="field-label">SYN flag</label>
+                                        <select id="syn_flag_count" class="form-control">
+                                            <option value="1" selected>1 (active)</option>
+                                            <option value="0">0 (inactive)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Hidden CICIDS2017 features -->
+                                <input type="hidden" id="total_backward_packets" value="2">
+                                <input type="hidden" id="total_length_fwd_packets" value="54400">
+                                <input type="hidden" id="total_length_bwd_packets" value="128">
+                                <input type="hidden" id="fwd_packet_length_max" value="64">
+                                <input type="hidden" id="fwd_packet_length_mean" value="64.0">
+                                <input type="hidden" id="bwd_packet_length_mean" value="64.0">
+                                <input type="hidden" id="flow_iat_mean" value="2.5">
+                                <input type="hidden" id="flow_iat_std" value="1.2">
+                                <input type="hidden" id="fwd_iat_total" value="1150.0">
+                                <input type="hidden" id="bwd_iat_total" value="50.0">
+                                <input type="hidden" id="fwd_packets_s" value="3450.0">
+                                <input type="hidden" id="bwd_packets_s" value="50.0">
+                                <input type="hidden" id="packet_length_mean" value="64.0">
+                                <input type="hidden" id="packet_length_std" value="12.0">
+                                <input type="hidden" id="fin_flag_count" value="0">
+                                <input type="hidden" id="rst_flag_count" value="0">
+                                <input type="hidden" id="psh_flag_count" value="0">
+                                <input type="hidden" id="ack_flag_count" value="0">
+                                <input type="hidden" id="urg_flag_count" value="0">
+                                <input type="hidden" id="down_up_ratio" value="0.0">
+                                <input type="hidden" id="average_packet_size" value="64.0">
+                                <input type="hidden" id="init_win_bytes_forward" value="2048">
+                                <input type="hidden" id="init_win_bytes_backward" value="0">
+
+                                <div class="btn-action-row">
+                                    <button type="submit" class="btn btn-primary" id="btn-detect" onclick="handleDetectThreat(event)" style="width:100%;">
+                                        <i class="fa-solid fa-microchip"></i>
+                                        <span id="lbl-btn-detect">Run detection</span>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- TreeSHAP panel - hidden until result -->
+                        <div class="explainability-card hidden" id="explainability-card" style="margin-top:20px;">
+                            <div class="explainability-title">
+                                <span id="lbl-xai-title">Evidence Signal Analysis</span> <span style="font-size:11px;font-weight:400;color:var(--se-text-muted);margin-left:6px;">relative importance (top feature = 100%)</span>
+                            </div>
+                            <div class="attr-list" id="xai-attr-list"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Results -->
+                <div class="workbench-card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fa-solid fa-shield-virus"></i>
+                            <span id="lbl-diag-title">Forensic Threat Analysis</span>
+                        </div>
+                        <span id="threat-badge" class="badge-neutral">No analysis yet</span>
+                    </div>
+
+                    <div class="card-body">
+                        <!-- Coverage + review badges -->
+                        <div class="meta-status-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px;">
+                            <span id="badge-coverage" class="badge-status">
+                                Coverage: <strong id="val-coverage">—</strong>
+                            </span>
+                            <span id="badge-timestamp-type" class="badge-status">Internal timestamp (not RFC 3161)</span>
+                            <span id="badge-analyst-review" class="badge-status badge-neutral">Analyst review: pending</span>
+                        </div>
+
+                        <!-- Diagnostics — neutral defaults, no color until result -->
+                        <div class="diag-container">
+                            <div class="diag-row">
+                                <span class="diag-k">Classification:</span>
+                                <span class="diag-v text-secondary" id="res-category">—</span>
+                            </div>
+                            <div class="diag-row">
+                                <span class="diag-k">MITRE ATT&CK:</span>
+                                <span class="diag-v text-secondary" id="res-mitre">—</span>
+                            </div>
+                            <div class="diag-row">
+                                <span class="diag-k">Severity:</span>
+                                <span class="diag-v text-secondary" id="res-severity">—</span>
+                            </div>
+                        </div>
+
+                        <!-- Countermeasure panel — hidden until result -->
+                        <div class="action-box hidden" id="action-box-panel">
+                            <div class="action-box-title">
+                                <span>Recommended response:</span>
+                            </div>
+                            <div class="action-box-desc" id="res-action"></div>
+                        </div>
+
+                        <!-- Probability bars — hidden until result -->
+                        <div class="prob-section hidden" id="prob-section-panel">
+                            <label class="section-label">Detection Breakdown:</label>
+                            <div id="prob-bars-list" class="prob-bars-list"></div>
+                        </div>
+
+                        <!-- Anchor section -->
+                        <div class="blockchain-card">
+                            <div class="bc-header">
+                                <span id="lbl-anchor-title">Anchor evidence to ledger</span>
+                            </div>
+                            <p class="bc-desc" id="lbl-anchor-desc">
+                                Stores the SHA-256 fingerprint, model provenance, and officer ECDSA signature in the evidence ledger.
+                            </p>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="field-label" id="lbl-field-case-id">Case ID (server-generated)</label>
+                                    <input type="text" id="input_case_id" class="form-control font-mono" readonly
+                                           placeholder="Auto-generated on anchor" value="">
+                                </div>
+                                <div class="form-group">
+                                    <label class="field-label" id="lbl-field-investigator">Lead investigator</label>
+                                    <input type="text" id="input_investigator" class="form-control" readonly
+                                           placeholder="From authenticated session" value="" style="text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">
+                                </div>
+                            </div>
+
+                            <button type="button" class="btn btn-mint" id="btn-store-bc" onclick="handleStoreEvidence()">
+                                <i class="fa-solid fa-lock"></i>
+                                <span id="lbl-btn-anchor-bc">Anchor to ledger</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /#pane-tab-threat-triage -->
+
+        <!-- Tab Pane 2: Live Stream Pipeline -->
+        <div class="nav-tab-pane tab-hidden" id="pane-tab-live-stream">
+            <section class="section-container" id="section-live-stream">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-tower-broadcast" style="color:var(--se-steel);"></i>
+                        <span id="stream-card-title">Real-time Stream Pipeline (Kafka + Spark + XGBoost)</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span id="stream-status-badge" class="badge-status badge-neutral">STOPPED</span>
+                        <span class="badge-status">Held-out CICIDS2017</span>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:14px;margin-bottom:16px;">
+                        <div style="background:var(--se-bg);padding:10px 14px;border-radius:var(--se-radius);border:1px solid var(--se-border);">
+                            <div style="font-size:11px;color:var(--se-text-muted);text-transform:uppercase;font-weight:600;">Throughput</div>
+                            <div style="font-size:20px;font-weight:700;color:var(--se-text);font-family:var(--font-mono);margin-top:2px;">
+                                <span id="stream-events-sec">0.0</span> <span style="font-size:12px;color:var(--se-text-muted);font-weight:400;">ev/s</span>
+                            </div>
+                        </div>
+                        <div style="background:var(--se-bg);padding:10px 14px;border-radius:var(--se-radius);border:1px solid var(--se-border);">
+                            <div style="font-size:11px;color:var(--se-text-muted);text-transform:uppercase;font-weight:600;">Consumer Lag</div>
+                            <div style="font-size:20px;font-weight:700;color:var(--se-text);font-family:var(--font-mono);margin-top:2px;" id="stream-consumer-lag">
+                                0
+                            </div>
+                        </div>
+                        <div style="background:var(--se-bg);padding:10px 14px;border-radius:var(--se-radius);border:1px solid var(--se-border);">
+                            <div style="font-size:11px;color:var(--se-text-muted);text-transform:uppercase;font-weight:600;">Scored Events</div>
+                            <div style="font-size:20px;font-weight:700;color:var(--se-steel);font-family:var(--font-mono);margin-top:2px;" id="stream-events-scored">
+                                0
+                            </div>
+                        </div>
+                        <div style="background:var(--se-bg);padding:10px 14px;border-radius:var(--se-radius);border:1px solid var(--se-border);">
+                            <div style="font-size:11px;color:var(--se-text-muted);text-transform:uppercase;font-weight:600;">Dead-letter Count</div>
+                            <div style="font-size:20px;font-weight:700;color:var(--se-text-muted);font-family:var(--font-mono);margin-top:2px;" id="stream-deadletter-count">
+                                0
+                            </div>
+                        </div>
+                    </div>
+
+                                        <!-- Dead-letter Event & Reason Box -->
+                    <div id="stream-deadletter-box" style="margin-bottom:14px;padding:8px 12px;background:var(--se-bg);border:1px solid var(--se-border);border-radius:var(--se-radius);font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                        <div>
+                            <span style="font-weight:600;color:var(--se-text-muted);">Dead-letter event:</span>
+                            <span id="stream-deadletter-msg" class="font-mono" style="margin-left:6px;color:var(--se-text);">None (all consumed packets validated)</span>
+                        </div>
+                        <div id="stream-deadletter-reason" style="font-size:11px;color:var(--se-text-muted);">No validation errors</div>
+                    </div>
+                    <!-- Controls row -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <label class="field-label" style="margin:0;">Replay Rate:</label>
+                            <input type="number" id="stream-control-rate" class="form-control font-mono" value="200" min="1" max="20000" style="width:110px;">
+                            <span style="font-size:12px;color:var(--text-secondary);">ev/s</span>
+                        </div>
+
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <button type="button" class="btn btn-primary" id="btn-stream-start" onclick="handleStreamControl('start')" title="Start streaming pipeline (investigator only)">
+                                <i class="fa-solid fa-play"></i> Start Stream
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="btn-stream-stop" onclick="handleStreamControl('stop')" title="Stop streaming pipeline (investigator only)">
+                                <i class="fa-solid fa-stop"></i> Stop Stream
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Recent stream alerts table -->
+                    <div style="margin-top:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <div style="display:flex;align-items:center;gap:12px;"><span style="font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Recent Stream Detections</span><label style="font-size:11px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--se-text);margin:0;"><input type="checkbox" id="stream-mismatches-only" onchange="pollStreamAlerts()"> Mismatches only</label></div>
+                            <span style="font-size:11px;color:var(--text-secondary);">Detections are not evidence until analyst review</span>
+                        </div>
+                        <div style="overflow-x:auto;">
+                            <table class="data-table" style="width:100%;font-size:12px;">
+                                <thead>
+                                    <tr>
+                                        <th>Event ID</th>
+                                        <th>Time</th>
+                                        <th>Classification</th>
+                                        <th>Confidence</th>
+                                        <th>Coverage</th>
+                                        <th>Ground Truth</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stream-alerts-tbody">
+                                    <tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:14px;">No stream detections yet.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div><!-- /#pane-tab-live-stream -->
+
+        <!-- Tab Pane 3: Integrity Verification -->
+        <div class="nav-tab-pane tab-hidden" id="pane-tab-integrity-verify">
+            <section class="section-container" id="section-3-verify">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-fingerprint"></i>
+                        <span id="lbl-sec3-title">Evidence Integrity Verification</span>
+                    </div>
+                    <span class="badge-status" id="lbl-sec3-badge">Hash verification</span>
+                </div>
+
+                <div class="card-body">
+                    <p class="section-text" id="lbl-sec3-desc">
+                        Validate whether an exported forensic payload matches its anchored ledger record.
+                        Use "Simulate Bit Mutation" to test cryptographic tamper detection on modified payload bytes.
+                    </p>
+
+                    <div class="tamper-grid">
+                        <div class="tamper-left">
+                            <div class="editor-toolbar">
+                                <span class="field-label" id="lbl-sec3-editor">Forensic payload (JSON):</span>
+                                <div class="toolbar-actions">
+                                    <button type="button" class="btn-sm btn-outline" id="btn-reset-json"
+                                            onclick="resetEvidenceJson()">
+                                        <span id="lbl-btn-reset">Reset</span>
+                                    </button>
+                                    <button type="button" class="btn-sm btn-tamper" id="btn-tamper-json"
+                                            onclick="tamperEvidenceJson()">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                        <span id="lbl-btn-tamper">Simulate Bit Mutation</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <textarea id="evidence-json-editor" class="json-editor font-mono" rows="9"
+                                placeholder="Paste or load a forensic payload JSON here, then click Verify."></textarea>
+
+                            <button type="button" class="btn btn-verify" id="btn-verify-ev" onclick="handleVerifyEvidence()">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <span id="lbl-btn-verify">Verify integrity</span>
+                            </button>
+                        </div>
+
+                        <div class="tamper-right">
+                            <div id="verdict-box" class="verdict-box status-neutral">
+                                <div class="verdict-icon text-secondary">
+                                    <i class="fa-solid fa-circle-question"></i>
+                                </div>
+                                <div class="verdict-title" id="verdict-title">Not yet verified</div>
+                                <div class="verdict-sub" id="verdict-sub">
+                                    Submit a payload to check it against the ledger.
+                                </div>
+
+                                <div class="verdict-meta">
+                                    <div class="meta-line">
+                                        <span class="meta-k">SHA-256:</span>
+                                        <span class="meta-v text-secondary font-mono" id="verdict-hash">—</span>
+                                    </div>
+                                    <div class="meta-line">
+                                        <span class="meta-k">Result:</span>
+                                        <span class="meta-v text-secondary font-bold" id="verdict-status">—</span>
+                                    </div>
+                                    <div class="meta-line" id="verdict-onchain-line" style="display:none;">
+                                        <span class="meta-k">Anchor:</span>
+                                        <span class="meta-v text-green font-bold" id="verdict-onchain-status">confirmed</span>
+                                    </div>
+                                    <div class="meta-line" id="verdict-block-line" style="display:none;">
+                                        <span class="meta-k">Block:</span>
+                                        <span class="meta-v font-mono text-secondary" id="verdict-block-num">—</span>
+                                    </div>
+                                    <div class="meta-line" id="verdict-tx-line" style="display:none;">
+                                        <span class="meta-k">Tx Hash:</span>
+                                        <span class="meta-v font-mono text-secondary" id="verdict-tx-hash" style="word-break:break-all;">—</span>
+                                    </div>
+                                    <div class="meta-line" id="verdict-explorer-line" style="display:none;">
+                                        <span class="meta-k">Explorer:</span>
+                                        <span class="meta-v" id="verdict-explorer-link">—</span>
+                                    </div>
+                                </div>
+
+                                <div style="display:flex;gap:8px;margin-top:10px;">
+                                    <button type="button" class="btn btn-cert" style="flex:1;" id="btn-view-cert" onclick="openCertificateModal()" disabled>
+                                        <i class="fa-solid fa-file-shield"></i>
+                                        <span id="lbl-btn-view-cert">View certificate</span>
+                                    </button>
+                                    <button type="button" class="btn btn-outline" style="flex:1;"
+                                            id="btn-download-evidence" onclick="handleDownloadCurrentEvidence()" disabled>
+                                        <i class="fa-solid fa-download"></i>
+                                        <span id="lbl-btn-download-evidence">Download certificate</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div><!-- /#pane-tab-integrity-verify -->
+
+        <!-- Tab Pane 4: Public Verifier -->
+        <div class="nav-tab-pane tab-hidden" id="pane-tab-public-verify">
+            <section class="section-container">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <span id="lbl-sec4-title">Public Ledger Verification</span>
+                    </div>
+                    <span class="badge-status" id="lbl-sec4-badge">Open to all</span>
+                </div>
+
+                <div class="card-body">
+                    <p class="section-text" id="lbl-sec4-desc">
+                        Verify any SHA-256 hash against the ledger registry, or drop a raw file to hash it locally
+                        in your browser before querying. The raw file never leaves your device.
+                    </p>
+
+                    <div id="public-drop-zone" class="drop-zone" onclick="document.getElementById('public-file-input').click()">
+                        <i class="fa-solid fa-file-shield" style="font-size:1.8rem;margin-bottom:6px;color:var(--se-steel);"></i>
+                        <div style="font-size:0.85rem;color:var(--se-text);font-weight:600;">Select or drop evidence file to verify</div>
+                        <div style="font-size:0.75rem;color:var(--se-text-muted);margin-top:4px;">
+                            SHA-256 computed client-side &bull; File content is never transmitted
+                        </div>
+                        <input type="file" id="public-file-input" style="display:none;" onchange="handlePublicFileSelected(event)">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group" style="flex:2;">
+                            <label class="field-label" id="lbl-public-hash-input">Or enter a SHA-256 hash:</label>
+                            <input type="text" id="public-verify-input" class="form-control font-mono"
+                                   placeholder="Paste 64-character hex digest…">
+                        </div>
+                        <div class="form-group" style="flex:1;display:flex;align-items:flex-end;">
+                            <button type="button" class="btn btn-primary" style="width:100%;" onclick="handlePublicVerify()">
+                                <i class="fa-solid fa-shield-halved"></i>
+                                <span id="lbl-btn-public-verify">Verify</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="public-verify-result" style="display:none;margin-top:14px;padding:14px;background:var(--se-bg);border-radius:6px;border:1px solid var(--se-border);color:var(--se-text);">
+                        <!-- Injected by JS -->
+                    </div>
+                </div>
+            </section>
+        </div><!-- /#pane-tab-public-verify -->
+
+        <!-- Tab Pane 5: Evidence Registry Ledger -->
+        <div class="nav-tab-pane tab-hidden" id="pane-tab-ledger-registry">
+            <section class="section-container">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-database"></i>
+                        <span id="lbl-sec5-title">Forensic Evidence Registry</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <span id="ledger-chain-status" class="badge-status" style="font-size:11px;padding:3px 8px;border-radius:12px;background:rgba(59,130,246,0.15);color:#3b82f6;">Chain verified</span>
+                        <button type="button" class="btn-sm btn-outline" id="btn-refresh-ledger" onclick="handleRefreshLedger(true)">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                            <span id="lbl-btn-refresh-ledger">Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="ledger-table">
+                            <thead>
+                                <tr>
+                                    <th>BLOCK #</th>
+                                    <th>TIMESTAMP</th>
+                                    <th>CASE ID</th>
+                                    <th>CATEGORY</th>
+                                    <th>TARGET</th>
+                                    <th>INVESTIGATOR</th>
+                                    <th>MODE</th>
+                                    <th>ACTIONS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ledger-table-body">
+                                <!-- Injected by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div><!-- /#pane-tab-ledger-registry -->
+
+
+            </main>
+        </div><!-- /.app-content -->
+    </div><!-- /.app-shell -->
+
+    <!-- Certificate Picker modal -->
+    <div id="cert-picker-modal" class="modal-backdrop hidden">
+        <div class="modal-dialog" style="max-width:620px;">
+            <div class="cert-card" style="padding:0;overflow:hidden;">
+                <!-- Picker header -->
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 24px 14px;border-bottom:1px solid var(--se-border);background:var(--se-navy);">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <i class="fa-solid fa-file-shield" style="color:#8FC4EE;font-size:1.1rem;"></i>
+                        <div>
+                            <div style="font-size:0.95rem;font-weight:700;color:#fff;">Select Record for Certificate</div>
+                            <div style="font-size:0.75rem;color:#8FC4EE;margin-top:1px;">Choose an anchored evidence record to view &amp; print its certificate</div>
+                        </div>
+                    </div>
+                    <button type="button" onclick="closeCertificatePicker()" style="background:none;border:none;color:#8FC4EE;font-size:1.1rem;cursor:pointer;padding:4px 8px;" title="Close">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Search bar -->
+                <div style="padding:12px 20px;border-bottom:1px solid var(--se-border);background:var(--se-card);">
+                    <div style="display:flex;align-items:center;gap:8px;background:var(--se-bg);border:1px solid var(--se-border);border-radius:6px;padding:6px 12px;">
+                        <i class="fa-solid fa-magnifying-glass" style="color:var(--se-text-muted);font-size:0.85rem;"></i>
+                        <input type="text" id="cert-picker-search"
+                            placeholder="Filter by Case ID, Classification or Investigator…"
+                            oninput="filterCertPickerList(this.value)"
+                            style="border:none;background:transparent;outline:none;font-size:0.82rem;width:100%;color:var(--se-text);font-family:var(--font-mono);">
+                    </div>
+                </div>
+
+                <!-- Record list -->
+                <div id="cert-picker-list" style="max-height:360px;overflow-y:auto;padding:10px 16px;background:var(--se-bg);">
+                    <!-- Populated by JS -->
+                    <div id="cert-picker-empty" style="text-align:center;padding:32px 16px;color:var(--se-text-muted);">
+                        <i class="fa-solid fa-inbox" style="font-size:1.6rem;margin-bottom:8px;display:block;"></i>
+                        <div style="font-size:0.85rem;">No anchored records found in the ledger.</div>
+                        <div style="font-size:0.75rem;margin-top:4px;">Anchor evidence first via Threat Triage → Anchor to ledger.</div>
+                    </div>
+                </div>
+
+                <!-- Footer actions -->
+                <div style="padding:14px 20px;border-top:1px solid var(--se-border);background:var(--se-card);display:flex;justify-content:flex-end;gap:10px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeCertificatePicker()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Certificate modal -->
+    <div id="cert-modal" class="modal-backdrop hidden">
+        <div class="modal-dialog">
+            <div class="cert-card">
+                <div class="cert-header">
+                    <div class="seal-container">
+                        <img src="/static/images/insa-emblem.png" alt="INSA Seal" class="cert-seal-img" onerror="this.src='/static/images/insa-logo.png'">
+                    </div>
+                    <div class="cert-titles">
+                        <div class="cert-country" id="cert-country-title">Information Network Security Administration</div>
+                        <div class="cert-agency" id="cert-agency-title">Federal Democratic Republic of Ethiopia</div>
+                        <div class="cert-rule"></div>
+                        <div class="cert-doc-title" id="cert-doc-header">Forensic evidence integrity certificate</div>
+                    </div>
+                </div>
+
+                <div class="cert-body">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <span id="cert-ledger-badge" class="badge-status">Evidence Ledger Registry</span>
+                        <span style="font-size:0.75rem;color:var(--se-text-muted);">Internal timestamp (not RFC 3161) · SECP256R1 ECDSA</span>
+                    </div>
+
+                    <p class="cert-text" id="cert-legal-disclaimer">
+                        This document attests to the SHA-256 cryptographic digest and digital signature recorded for the forensic evidence payload below pursuant to Federal Electronic Evidence and Digital Signature guidelines.
+                    </p>
+
+                    <div class="cert-meta-grid" style="margin:16px 0;">
+                            <div class="cert-item"><span class="cert-k">Case ID:</span> <span class="cert-v font-mono" id="cert-case-id">—</span></div>
+                            <div class="cert-item"><span class="cert-k">Classification:</span> <span class="cert-v text-amber" id="cert-incident">—</span></div>
+                            <div class="cert-item"><span class="cert-k">Target asset:</span> <span class="cert-v" id="cert-target">—</span></div>
+                            <div class="cert-item"><span class="cert-k">Ledger block:</span> <span class="cert-v font-mono" id="cert-block">—</span></div>
+                            <div class="cert-item"><span class="cert-k">Lead investigator:</span> <span class="cert-v" id="cert-investigator">—</span></div>
+                            <div class="cert-item"><span class="cert-k">Internal timestamp (not RFC 3161):</span> <span class="cert-v font-mono" id="cert-timestamp">—</span></div>
+                            <div class="cert-item" id="cert-chain-id-row"><span class="cert-k">Chain ID:</span> <span class="cert-v font-mono" id="cert-chain-id">—</span></div>
+                            <div class="cert-item" id="cert-contract-addr-row"><span class="cert-k">Contract address:</span> <span class="cert-v font-mono" id="cert-contract-address">—</span></div>
+                            <div class="cert-item" id="cert-tx-hash-row"><span class="cert-k">Tx hash:</span> <span class="cert-v font-mono" id="cert-tx-hash" style="word-break:break-all;">—</span></div>
+                            <div class="cert-item" id="cert-chain-block-row"><span class="cert-k">Chain block:</span> <span class="cert-v font-mono" id="cert-chain-block">—</span></div>
+                            <div class="cert-item" id="cert-explorer-row"><span class="cert-k">Explorer:</span> <span class="cert-v" id="cert-explorer-link">—</span></div>
+                        </div>
+                    <div style="font-size:0.75rem;color:var(--se-text-muted);margin:8px 0;font-style:italic;" id="cert-testnet-notice">
+                        public test network, hashes only; not a legal timestamp
+                    </div>
+                    <div class="cert-hash-container">
+                        <div class="cert-hash-label">SHA-256 DIGEST:</div>
+                        <div class="cert-hash-string font-mono" id="cert-hash">—</div>
+                    </div>
+
+                    <div class="cert-hash-container" style="margin-top:8px;border-color:#333;">
+                        <div class="cert-hash-label">OFFICER ECDSA SIGNATURE (SECP256R1):</div>
+                        <div class="cert-hash-string font-mono" id="cert-sig" style="color:var(--amber-primary);font-size:0.7rem;word-break:break-all;">—</div>
+                    </div>
+
+                    <div class="cert-verdict-banner">
+                        <i class="fa-solid fa-circle-check text-green"></i>
+                        <span id="cert-verdict-text">Integrity verified: hash matches anchored record.</span>
+                    </div>
+                </div>
+
+                <div class="cert-signatures">
+                    <div class="cert-sig-block">
+                        <div class="sig-line"></div>
+                        <div class="sig-name">Certified Forensic Examiner</div>
+                        <div class="sig-role">Digital Forensics Directorate, INSA</div>
+                    </div>
+                    <div class="cert-sig-block">
+                        <div class="sig-line"></div>
+                        <div class="sig-name">Federal Registrar / Judiciary Auditor</div>
+                        <div class="sig-role">Federal High Court Depository, Addis Ababa</div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="window.print()">
+                        <i class="fa-solid fa-print"></i>
+                        <span>Print / Save PDF</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeCertificateModal()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chain of custody modal -->
+    <div id="custody-modal" class="modal-backdrop hidden">
+        <div class="modal-dialog" style="max-width:750px;">
+            <div class="cert-card" style="padding:24px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-color);padding-bottom:12px;margin-bottom:16px;">
+                    <div style="font-size:1.1rem;font-weight:700;color:var(--amber-primary);">
+                        <span id="lbl-custody-title">Chain of custody log</span>
+                    </div>
+                    <span id="custody-case-badge" class="badge-status">Case: pending</span>
+                </div>
+                <div id="custody-timeline-list" style="display:flex;flex-direction:column;gap:12px;max-height:400px;overflow-y:auto;"></div>
+                <div style="margin-top:16px;text-align:right;">
+                    <button type="button" class="btn btn-secondary" onclick="closeCustodyModal()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login modal -->
+    <div id="login-modal" class="modal-backdrop hidden">
+        <div class="modal-dialog" style="max-width:440px;">
+            <div class="cert-card" style="padding:24px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-color);padding-bottom:12px;margin-bottom:16px;">
+                    <div style="font-size:1.1rem;font-weight:700;color:var(--amber);">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span id="lbl-auth-login-title">Sign in</span>
+                    </div>
+                    <button type="button" class="btn-lang-toggle" onclick="closeLoginModal()">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div id="demo-console-notice" style="font-size:12px;color:var(--text-secondary);background:rgba(15,23,42,0.6);border:1px solid var(--border-color);border-radius:6px;padding:12px 14px;margin-bottom:16px;">
+                    <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:0.8rem;color:var(--text-secondary);"><i class="fa-solid fa-user-shield" style="color:var(--se-steel);margin-right:5px;"></i> Demo Roles</span>
+                        <span style="font-size:0.75rem;color:var(--se-text-muted);">Click to auto-fill</span>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button type="button" class="btn btn-outline" id="btn-role-investigator" style="flex:1;padding:7px 12px;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;" onclick="fillDemoCredentials('demo_investigator','DemoTestPassword123!', this)" title="Forensic Investigator (threat detection, review, live stream &amp; blockchain anchoring)">
+                            <i class="fa-solid fa-fingerprint" style="color:var(--se-steel);"></i> Investigator
+                        </button>
+                        <button type="button" class="btn btn-outline" id="btn-role-admin" style="flex:1;padding:7px 12px;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;" onclick="fillDemoCredentials('demo_admin','DemoTestPassword123!', this)" title="System Administrator (system configuration, audit trail &amp; infrastructure)">
+                            <i class="fa-solid fa-shield-halved" style="color:var(--se-steel);"></i> Admin
+                        </button>
+                    </div>
+                </div>
+
+                <div id="login-error-msg" class="hidden" style="background:rgba(239,68,68,0.15);border:1px solid var(--red);color:#f87171;padding:10px;border-radius:6px;font-size:12px;margin-bottom:16px;"></div>
+
+                <form id="login-form" onsubmit="submitLogin(event)">
+                    <div style="margin-bottom:14px;">
+                        <label for="login-username" style="display:block;font-size:12px;margin-bottom:6px;color:var(--text-secondary);" id="lbl-login-username">Username</label>
+                        <input type="text" id="login-username" class="form-input" style="width:100%;box-sizing:border-box;" required autocomplete="username">
+                    </div>
+                    <div style="margin-bottom:20px;">
+                        <label for="login-password" style="display:block;font-size:12px;margin-bottom:6px;color:var(--text-secondary);" id="lbl-login-password">Password</label>
+                        <input type="password" id="login-password" class="form-input" style="width:100%;box-sizing:border-box;" required autocomplete="current-password">
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:10px;">
+                        <button type="button" class="btn btn-secondary" onclick="closeLoginModal()" id="lbl-btn-cancel-login">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="lbl-btn-submit-login">Sign in</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="footer-inner">
+            <div class="footer-left">
+                <span>SecureEvidence &mdash; digital evidence &amp; forensics</span>
+            </div>
+            <div class="footer-right">
+                <span>Nathenael Ermias &middot; <a href="mailto:nathenaelermias13@gmail.com" style="color:var(--amber);">nathenaelermias13@gmail.com</a></span>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/static/js/app.js?v=20261019_v8"></script>
+</body>
+</html>

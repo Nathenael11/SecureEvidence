@@ -1,0 +1,721 @@
+{
+    "author": "Nathenael Ermias",
+    "email": "nathenaelermias13@gmail.com",
+    "project": "SecureEvidence",
+    "dataset": "CICIDS2017",
+    "accuracy": 0.9985,
+    "macro_f1": 0.9639,
+    "feature_columns": [
+        "Flow Duration",
+        "Total Fwd Packets",
+        "Total Backward Packets",
+        "Total Length of Fwd Packets",
+        "Total Length of Bwd Packets",
+        "Fwd Packet Length Max",
+        "Fwd Packet Length Min",
+        "Fwd Packet Length Mean",
+        "Fwd Packet Length Std",
+        "Bwd Packet Length Max",
+        "Bwd Packet Length Min",
+        "Bwd Packet Length Mean",
+        "Bwd Packet Length Std",
+        "Flow Bytes/s",
+        "Flow Packets/s",
+        "Flow IAT Mean",
+        "Flow IAT Std",
+        "Flow IAT Max",
+        "Flow IAT Min",
+        "Fwd IAT Total",
+        "Fwd IAT Mean",
+        "Fwd IAT Std",
+        "Fwd IAT Max",
+        "Fwd IAT Min",
+        "Bwd IAT Total",
+        "Bwd IAT Mean",
+        "Bwd IAT Std",
+        "Bwd IAT Max",
+        "Bwd IAT Min",
+        "Fwd PSH Flags",
+        "Bwd PSH Flags",
+        "Fwd URG Flags",
+        "Bwd URG Flags",
+        "Fwd Header Length",
+        "Bwd Header Length",
+        "Fwd Packets/s",
+        "Bwd Packets/s",
+        "Min Packet Length",
+        "Max Packet Length",
+        "Packet Length Mean",
+        "Packet Length Std",
+        "Packet Length Variance",
+        "FIN Flag Count",
+        "SYN Flag Count",
+        "RST Flag Count",
+        "PSH Flag Count",
+        "ACK Flag Count",
+        "URG Flag Count",
+        "CWE Flag Count",
+        "ECE Flag Count",
+        "Down/Up Ratio",
+        "Average Packet Size",
+        "Avg Fwd Segment Size",
+        "Avg Bwd Segment Size",
+        "Fwd Header Length.1",
+        "Fwd Avg Bytes/Bulk",
+        "Fwd Avg Packets/Bulk",
+        "Fwd Avg Bulk Rate",
+        "Bwd Avg Bytes/Bulk",
+        "Bwd Avg Packets/Bulk",
+        "Bwd Avg Bulk Rate",
+        "Subflow Fwd Packets",
+        "Subflow Fwd Bytes",
+        "Subflow Bwd Packets",
+        "Subflow Bwd Bytes",
+        "Init_Win_bytes_forward",
+        "Init_Win_bytes_backward",
+        "act_data_pkt_fwd",
+        "min_seg_size_forward",
+        "Active Mean",
+        "Active Std",
+        "Active Max",
+        "Active Min",
+        "Idle Mean",
+        "Idle Std",
+        "Idle Max",
+        "Idle Min"
+    ],
+    "attack_classes": [
+        "BENIGN",
+        "Bot",
+        "DDoS",
+        "DoS GoldenEye",
+        "DoS Hulk",
+        "DoS Slowhttptest",
+        "DoS slowloris",
+        "FTP-Patator",
+        "Other_Attack",
+        "PortScan",
+        "SSH-Patator",
+        "Web_Attack"
+    ],
+    "schema_version": "1.1.0",
+    "model_sha256": "5397c6b1b063654781e66796fdcdce67e81d2990a743b39eb8fad017ae007c73",
+    "empirical_percentiles": {
+        "Flow Duration": {
+            "p10": 957.1374,
+            "p25": 19501.3101,
+            "p50": 94721.3517,
+            "p75": 267962.956,
+            "p90": 421056.2662,
+            "p99": 632024.2134
+        },
+        "Total Fwd Packets": {
+            "p10": 5.0,
+            "p25": 12.0,
+            "p50": 25.0,
+            "p75": 100.75,
+            "p90": 1046.2,
+            "p99": 2628.14
+        },
+        "Total Backward Packets": {
+            "p10": 0.0,
+            "p25": 4.0,
+            "p50": 13.0,
+            "p75": 23.0,
+            "p90": 47.0,
+            "p99": 147.08
+        },
+        "Total Length of Fwd Packets": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 1355.4504,
+            "p75": 3908.4998,
+            "p90": 59535.6367,
+            "p99": 181785.3163
+        },
+        "Total Length of Bwd Packets": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 376.4024,
+            "p75": 10055.7777,
+            "p90": 16525.1586,
+            "p99": 19619.8313
+        },
+        "Fwd Packet Length Max": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 319.2537,
+            "p75": 830.1752,
+            "p90": 1204.8036,
+            "p99": 1408.6088
+        },
+        "Fwd Packet Length Min": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd Packet Length Mean": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 230.3604,
+            "p90": 329.6097,
+            "p99": 392.3097
+        },
+        "Fwd Packet Length Std": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd Packet Length Max": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd Packet Length Min": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd Packet Length Mean": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 517.0095,
+            "p90": 724.0823,
+            "p99": 888.7851
+        },
+        "Bwd Packet Length Std": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Flow Bytes/s": {
+            "p10": 350.5368,
+            "p25": 12436.2007,
+            "p50": 32594.4368,
+            "p75": 100414.8297,
+            "p90": 2573432.8866,
+            "p99": 9503673.5899
+        },
+        "Flow Packets/s": {
+            "p10": 7.9115,
+            "p25": 21.4488,
+            "p50": 41.6578,
+            "p75": 685.0517,
+            "p90": 3560.0635,
+            "p99": 13463.152
+        },
+        "Flow IAT Mean": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 2503.9136,
+            "p75": 15479.4057,
+            "p90": 21353.0775,
+            "p99": 44768.6936
+        },
+        "Flow IAT Std": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Flow IAT Max": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Flow IAT Min": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd IAT Total": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd IAT Mean": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd IAT Std": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd IAT Max": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd IAT Min": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd IAT Total": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd IAT Mean": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd IAT Std": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd IAT Max": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd IAT Min": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd PSH Flags": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd PSH Flags": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd URG Flags": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd URG Flags": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd Header Length": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd Header Length": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd Packets/s": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd Packets/s": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Min Packet Length": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Max Packet Length": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Packet Length Mean": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Packet Length Std": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Packet Length Variance": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "FIN Flag Count": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "SYN Flag Count": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 1.0,
+            "p99": 1.0
+        },
+        "RST Flag Count": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 1.0,
+            "p99": 1.0
+        },
+        "PSH Flag Count": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 1.0,
+            "p75": 1.0,
+            "p90": 1.0,
+            "p99": 1.0
+        },
+        "ACK Flag Count": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 1.0,
+            "p75": 1.0,
+            "p90": 1.0,
+            "p99": 1.0
+        },
+        "URG Flag Count": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "CWE Flag Count": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "ECE Flag Count": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Down/Up Ratio": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 1.1274,
+            "p90": 1.3386,
+            "p99": 1.4838
+        },
+        "Average Packet Size": {
+            "p10": 54.439,
+            "p25": 114.2112,
+            "p50": 323.8594,
+            "p75": 470.4723,
+            "p90": 580.2955,
+            "p99": 788.2256
+        },
+        "Avg Fwd Segment Size": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Avg Bwd Segment Size": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd Header Length.1": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd Avg Bytes/Bulk": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd Avg Packets/Bulk": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Fwd Avg Bulk Rate": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd Avg Bytes/Bulk": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd Avg Packets/Bulk": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Bwd Avg Bulk Rate": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Subflow Fwd Packets": {
+            "p10": 5.0,
+            "p25": 12.0,
+            "p50": 25.0,
+            "p75": 100.75,
+            "p90": 1046.2,
+            "p99": 2628.14
+        },
+        "Subflow Fwd Bytes": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 1355.4504,
+            "p75": 3908.4998,
+            "p90": 59535.6367,
+            "p99": 181785.3163
+        },
+        "Subflow Bwd Packets": {
+            "p10": 0.0,
+            "p25": 4.0,
+            "p50": 13.0,
+            "p75": 23.0,
+            "p90": 47.0,
+            "p99": 147.08
+        },
+        "Subflow Bwd Bytes": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 376.4024,
+            "p75": 10055.7777,
+            "p90": 16525.1586,
+            "p99": 19619.8313
+        },
+        "Init_Win_bytes_forward": {
+            "p10": 0.0,
+            "p25": 8192.0,
+            "p50": 29200.0,
+            "p75": 29200.0,
+            "p90": 65535.0,
+            "p99": 65535.0
+        },
+        "Init_Win_bytes_backward": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 29200.0,
+            "p90": 29200.0,
+            "p99": 29200.0
+        },
+        "act_data_pkt_fwd": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "min_seg_size_forward": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Active Mean": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Active Std": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Active Max": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Active Min": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Idle Mean": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Idle Std": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Idle Max": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        },
+        "Idle Min": {
+            "p10": 0.0,
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p99": 0.0
+        }
+    }
+}

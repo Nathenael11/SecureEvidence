@@ -1,0 +1,42 @@
+# Python Bytecode & Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Node & Hardhat
+node_modules/
+blockchain/artifacts/
+blockchain/cache/
+
+# Local databases & logs
+data/
+*.db
+*-wal
+*-shm
+*.db-journal
+audit_trail.jsonl
+
+# Chain runtime daemon files
+scripts/chain/*.pid
+scripts/chain/*.log
+scripts/chain/*.err
+
+# IDE configuration
+.vscode/
+.idea/
+
+# Operating System files
+.DS_Store
+Thumbs.db
