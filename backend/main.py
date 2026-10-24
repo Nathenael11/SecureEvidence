@@ -137,9 +137,16 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # Strict CORS origin restriction
 allowed_origins = [settings.PUBLIC_BASE_URL, "http://localhost:8000", "http://127.0.0.1:8000"]
+if os.getenv("ALLOWED_ORIGINS"):
+    for o in os.getenv("ALLOWED_ORIGINS").split(","):
+        o_clean = o.strip()
+        if o_clean and o_clean not in allowed_origins:
+            allowed_origins.append(o_clean)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],

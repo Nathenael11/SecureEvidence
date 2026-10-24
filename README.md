@@ -8,6 +8,7 @@
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.20-363636.svg)](https://soliditylang.org/)
 [![Ethereum](https://img.shields.io/badge/Ethereum-Hardhat-yellow.svg)](https://hardhat.org/)
 [![Tests](https://img.shields.io/badge/Tests-100%25%20Passing-00e676.svg)]()
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Render-46E3B7.svg?style=flat&logo=render&logoColor=white)](https://secureevidence.onrender.com)
 [![Author](https://img.shields.io/badge/Author-Nathenael%20Ermias-ffb300.svg)](mailto:nathenaelermias13@gmail.com)
 
 **SecureEvidence** is a cybersecurity forensics and evidence non-repudiation prototype platform designed for the **Information Network Security Administration (INSA)** of Ethiopia. It demonstrates digital evidence integrity and non-repudiation in judicial contexts by integrating **XGBoost AI threat classification**, **PySpark log stream processing**, and **SHA-256 evidence ledger anchoring** (with dual live Ethereum/Besu consortium node and in-memory simulated cryptographic ledger modes).
@@ -146,6 +147,21 @@ SecureEvidence features real end-to-end blockchain anchoring on Ethereum-compati
 - **Company Logos**: Official logos for **INSA**, **Ethio Telecom**, **Commercial Bank of Ethiopia (CBE)**, and **National Bank of Ethiopia (NBE)**.
 - **Tamper Simulation Engine**: Interactive JSON editor allowing analysts to modify a single byte and observe immediate cryptographic rejection.
 - **Court Certificate Generator**: Modal generating exportable and printable **FDRE Federal High Court Digital Evidence Certificates**.
+
+---
+
+## 🌐 Live Cloud Deployment
+
+SecureEvidence is fully configured for containerized cloud deployment on **Render**:
+
+* **Live Demo URL**: [https://secureevidence.onrender.com](https://secureevidence.onrender.com)
+* **Automated Blueprint**: Uses `render.yaml` for containerized orchestration with health checks (`/health`) and dynamic port binding.
+
+### Deploying Your Own Instance to Render (Free Tier):
+1. Log into your [Render Dashboard](https://dashboard.render.com/).
+2. Click **New +** → **Web Service** (or **Blueprint**).
+3. Connect your repository: `Nathenael11/SecureEvidence`.
+4. Render detects the multi-stage `Dockerfile` (or `render.yaml`) and deploys the full stack in ~2 minutes.
 
 ---
 

@@ -19,7 +19,7 @@ WORKDIR /app
 
 # Copy installed wheels
 COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:
+ENV PATH=/root/.local/bin:$PATH
 
 # Application code and pre-trained model artifacts
 COPY . .
@@ -29,4 +29,4 @@ EXPOSE 8000
 ENV PORT=8000
 ENV PYTHONUNBUFFERED=1
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
