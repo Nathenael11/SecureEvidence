@@ -1,0 +1,56 @@
+{
+    "schema_version": "1.1.0",
+    "dataset": "CICIDS2017 (combinenew.csv / Canadian Institute for Cybersecurity)",
+    "metadata": {
+        "split_type": "stratified_random_80_20",
+        "dedup_before_split": true,
+        "rows_removed_by_dedup": 330959,
+        "total_rows_before_dedup": 2830743,
+        "total_cleaned_flows": 2499784,
+        "train_rows": 1999827,
+        "test_rows": 499957,
+        "scaler_fit_on_train_only": true,
+        "encoder_fit_on_train_only": true,
+        "day_based_split_performed": false,
+        "day_based_split_note": "CICIDS2017 flow CSV does not carry reliable per-flow timestamps after deduplication and concatenation; a day-based (Mon-Wed train / Thu-Fri test) split cannot be performed without access to the raw per-day CSVs. The stratified random split is therefore the only one executed. Results are likely optimistic relative to a true temporal split because flows from the same day appear in both train and test. This is noted as a limitation."
+    },
+    "split_method": "Deduplication (330,959 exact duplicates removed from 2,830,743 raw rows) prior to split; stratified 80/20 train/test partition. Scaler and encoder fit strictly on training set. WARNING: stratified random split — results likely optimistic; see day_based_split_note.",
+    "model_architecture": "XGBoost multi-class classifier (n_estimators=300, max_depth=8, lr=0.08, subsample=0.85, colsample=0.85)",
+    "model_file_sha256": "5397c6b1b063654781e66796fdcdce67e81d2990a743b39eb8fad017ae007c73",
+    "stratified_split_results": {
+        "split_type": "stratified_random_80_20",
+        "overall_accuracy": 0.9985,
+        "macro_f1": 0.9639,
+        "weighted_f1": 0.9985,
+        "benign_false_positive_rate": 0.0012,
+        "ablation_study": {
+            "with_destination_port": {
+                "macro_f1": 0.9639,
+                "overall_accuracy": 0.9985,
+                "note": "Includes Destination Port feature. Higher raw metric but risks overfitting to specific port numbers in synthetic benchmark captures."
+            },
+            "without_destination_port": {
+                "macro_f1": 0.9512,
+                "overall_accuracy": 0.9961,
+                "note": "Port-agnostic feature space (flow rates, packet lengths, TCP window, inter-arrival times). Demonstrates resilience against non-standard port shifting."
+            }
+        },
+        "per_class_metrics": {
+            "BENIGN": {"precision": 1.0, "recall": 1.0, "f1_score": 1.0, "support": 414781},
+            "Bot": {"precision": 0.57, "recall": 0.98, "f1_score": 0.72, "support": 390},
+            "DDoS": {"precision": 1.0, "recall": 1.0, "f1_score": 1.0, "support": 25603},
+            "DoS GoldenEye": {"precision": 0.99, "recall": 1.0, "f1_score": 0.99, "support": 2057},
+            "DoS Hulk": {"precision": 1.0, "recall": 1.0, "f1_score": 1.0, "support": 34570},
+            "DoS Slowhttptest": {"precision": 0.94, "recall": 0.99, "f1_score": 0.97, "support": 1046},
+            "DoS slowloris": {"precision": 0.99, "recall": 1.0, "f1_score": 0.99, "support": 1077},
+            "FTP-Patator": {"precision": 1.0, "recall": 1.0, "f1_score": 1.0, "support": 1187},
+            "Other_Attack": {"precision": 1.0, "recall": 0.89, "f1_score": 0.94, "support": 9},
+            "PortScan": {"precision": 0.99, "recall": 1.0, "f1_score": 0.99, "support": 18164},
+            "SSH-Patator": {"precision": 1.0, "recall": 1.0, "f1_score": 1.0, "support": 644},
+            "Web_Attack": {"precision": 0.94, "recall": 0.99, "f1_score": 0.96, "support": 429}
+        }
+    },
+    "day_based_split_results": null,
+    "known_dataset_limitations_note": "CICIDS2017 has documented labeling errors and duplicated records (Engelen et al., 2021). All results reflect cleaned deduplicated subsets. Day-based split not performed (see metadata.day_based_split_note).",
+    "confusion_matrix_note": "Full confusion matrix available in ai_engine/models/confusion_matrix.npy if generated during training."
+}

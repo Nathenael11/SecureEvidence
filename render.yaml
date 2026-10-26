@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: secureevidence
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DEMO_MODE
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CHAIN_MODE
+        value: "off"
+      - key: LEDGER_BACKEND
+        value: "sqlite"
+      - key: FEATURE_COVERAGE_THRESHOLD
+        value: "0.60"

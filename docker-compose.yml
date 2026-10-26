@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  secure-evidence-app:
+    build: .
+    container_name: insa_secure_evidence
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - RPC_URL=http://hardhat-node:8545
+      - AGENCY_NAME=INSA Ethiopia
+      - AUTHOR_NAME=Nathenael Ermias
+    restart: unless-stopped

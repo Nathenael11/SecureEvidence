@@ -1,0 +1,16 @@
+{
+  "name": "secure-evidence",
+  "version": "1.0.0",
+  "description": "SecureEvidence: AI Threat Detection & Blockchain Evidence Integrity System",
+  "scripts": {
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "test": "hardhat test",
+    "compile": "hardhat compile"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.29.1"
+  }
+}

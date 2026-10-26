@@ -1,0 +1,24 @@
+# SecureEvidence: AI Threat Detection & Blockchain Evidence Integrity System
+# Author: Nathenael Ermias nathenaelermias13@gmail.com
+
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+xgboost>=2.0.3
+scikit-learn>=1.4.0
+pandas>=2.2.0
+numpy>=1.26.0
+joblib>=1.3.2
+web3>=6.15.0
+eth-account>=0.11.0
+pytest>=8.0.0
+httpx>=0.26.0
+python-multipart>=0.0.9
+jinja2>=3.1.3
+python-dotenv>=1.0.1
+PyJWT>=2.15.1
+cryptography>=50.0.2
+anyio>=4.15.1
+pillow>=12.3.0
+bcrypt>=5.0.0

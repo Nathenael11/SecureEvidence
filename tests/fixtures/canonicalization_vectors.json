@@ -1,0 +1,52 @@
+[
+  {
+    "description": "Schema numeric fields coerced uniformly",
+    "input": {
+      "flow_duration": "1200.0",
+      "total_fwd_packets": "850",
+      "bwd_packets_s": 50.0
+    },
+    "expected_canonical": {
+      "bwd_packets_s": 50,
+      "flow_duration": 1200,
+      "total_fwd_packets": 850
+    },
+    "expected_sha256": "3b8d9f79de6ebb0d050a02c0e33fb4caf54cf0f47c49e1d669a939f1a5256aba"
+  },
+  {
+    "description": "Non-schema numeric string remains untouched",
+    "input": {
+      "case_code": "007",
+      "agent_rank": 7,
+      "scientific_note": "1e3",
+      "literal_num": 1000
+    },
+    "expected_canonical": {
+      "agent_rank": 7,
+      "case_code": "007",
+      "literal_num": 1000,
+      "scientific_note": "1e3"
+    },
+    "expected_sha256": "ffb980e1eea217da651a148949b36953a72b4f37e53b2c4bfe9dce7532c82552"
+  },
+  {
+    "description": "Key sorting is deterministic",
+    "input": {
+      "z": 1,
+      "a": 2,
+      "m": {
+        "nested_z": "test",
+        "nested_a": 10
+      }
+    },
+    "expected_canonical": {
+      "a": 2,
+      "m": {
+        "nested_a": 10,
+        "nested_z": "test"
+      },
+      "z": 1
+    },
+    "expected_sha256": "ea1686349324b5dedbd36973ade8c5f6346da2fc1496af375bbec6b9c9e6e1a3"
+  }
+]
