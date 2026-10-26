@@ -27,6 +27,21 @@ HARDHAT_ACCOUNT_0_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784
 HARDHAT_UNAUTHORIZED_KEY = "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba"
 
 
+def is_hardhat_available() -> bool:
+    try:
+        from web3 import Web3
+        w3 = Web3(Web3.HTTPProvider(LOCAL_RPC_URL, request_kwargs={"timeout": 1}))
+        return bool(w3.is_connected())
+    except Exception:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not is_hardhat_available(),
+    reason="Local Hardhat node on port 8545 is not running (requires running npx hardhat node)"
+)
+
+
 def get_file_hash(path: str) -> str:
     """Compute SHA-256 hash of a file if it exists."""
     if not os.path.exists(path):

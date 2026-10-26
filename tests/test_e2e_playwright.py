@@ -17,6 +17,20 @@ from playwright.sync_api import sync_playwright
 SERVER_URL = "http://127.0.0.1:8899"
 SCREENSHOT_DIR = os.getenv("SCREENSHOT_DIR", os.path.join(tempfile.gettempdir(), "playwright_screenshots"))
 
+def is_playwright_installed() -> bool:
+    if os.getenv("SKIP_E2E_PLAYWRIGHT", "0") in ("1", "true", "yes"):
+        return False
+    try:
+        from playwright.sync_api import sync_playwright
+        return True
+    except ImportError:
+        return False
+
+pytestmark = pytest.mark.skipif(
+    not is_playwright_installed(),
+    reason="Playwright not installed or SKIP_E2E_PLAYWRIGHT=1"
+)
+
 @pytest.fixture(scope="module", autouse=True)
 def run_app_server():
     """Spin up uvicorn server on port 8899 with fixed test demo credentials in isolated temporary databases."""
