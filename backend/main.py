@@ -893,6 +893,7 @@ async def store_evidence(
             details=f"Anchored evidence for {case_id} (hash: {receipt['evidence_hash'][:16]}...)"
         )
 
+        receipt['evidence_payload'] = req_data.evidence_payload
         return receipt
     except (RpcDownError, WrongChainIdError, InsufficientFundsError) as e:
         raise HTTPException(

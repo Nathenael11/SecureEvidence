@@ -1758,6 +1758,9 @@ async function handleStoreEvidence() {
         if (caseInput && data.case_id) {
             caseInput.value = data.case_id;
         }
+        if (data.evidence_payload) {
+            evidenceToStore = data.evidence_payload;
+        }
         const edEl = document.getElementById('evidence-json-editor');
         if (edEl) edEl.value = JSON.stringify(evidenceToStore, null, 2);
         originalEvidencePayload = JSON.parse(JSON.stringify(evidenceToStore));
