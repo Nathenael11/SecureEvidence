@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
 
 AUTHOR_EMAIL: str = os.getenv("AUTHOR_EMAIL", "nathenaelermias13@gmail.com")
-DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() in ("true", "1", "yes")
+DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "yes")
 FEATURE_COVERAGE_THRESHOLD: float = float(os.getenv("FEATURE_COVERAGE_THRESHOLD", "0.60"))
 
 class Settings(BaseSettings):

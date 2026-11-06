@@ -3,7 +3,7 @@ services:
     name: secureevidence
     env: docker
     plan: free
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: Dockerfile
     healthCheckPath: /health
     envVars:
       - key: DEMO_MODE
