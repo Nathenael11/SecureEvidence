@@ -1,5 +1,7 @@
 # SecureEvidence
-### AI Threat Detection & Court-Admissible Blockchain Evidence Ledger for INSA
+### AI Threat Detection & Tamper-Evident Blockchain Evidence Ledger
+
+> **Note:** Student graduation prototype built during the INSA CyberTalent Summer Camp; not an official INSA product.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Render-46E3B7.svg?style=flat&logo=render&logoColor=white)](https://secureevidence.onrender.com)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
@@ -16,29 +18,31 @@
 You can test the deployed application directly in your browser:  
 👉 **[https://secureevidence.onrender.com](https://secureevidence.onrender.com)**
 
-### Quick Demo Access:
-| Role | Username | Password | Operational Scope |
+### Demo Access & Security:
+| Role | Username | Provisioning Mode | Operational Scope |
 | :--- | :--- | :--- | :--- |
-| **Investigator** | `demo_investigator` | `DemoTestPassword123!` | AI Threat Detection, TreeSHAP Feature Analysis, Blockchain Evidence Anchoring, Tamper Verification |
-| **Admin** | `demo_admin` | `DemoTestPassword123!` | Full System Administration, Audit Trail Inspection, Chain Recovery |
+| **Investigator** | `demo_investigator` | Initialized at boot (`DEMO_MODE=true`) or via CLI | AI Threat Detection, TreeSHAP Feature Analysis, Blockchain Evidence Anchoring, Tamper Verification |
+| **Admin** | `demo_admin` | Initialized at boot (`DEMO_MODE=true`) or via CLI | Full System Administration, Audit Trail Inspection, Chain Recovery |
 
-*(Tip: On the Sign-In modal, simply click the **Investigator** or **Admin** button to auto-fill credentials instantly.)*
+> **Security Note:** In production, credentials are never baked into container images or published. Accounts are provisioned via `python -m backend.manage create-user`. When `DEMO_MODE=false`, the server refuses startup unless a secure `JWT_SECRET` is provided.
 
 ---
 
 ## 📌 Why I Built SecureEvidence
 
-When digital forensic teams at the **Information Network Security Administration (INSA)** investigate cyber incidents or seize compromised systems, they face a recurring challenge in court under Ethiopia's *Computer Crime Proclamation No. 958/2016* and *Electronic Signature Proclamation No. 1072/2018*:
+When digital forensic teams investigate cyber incidents or seize compromised systems, they face a recurring challenge in court under electronic evidence and cybercrime legal frameworks (including Ethiopia's *Computer Crime Proclamation No. 958/2016* and *Electronic Signature Proclamation No. 1072/2018*):
 
 > **"How does the court verify that the server logs, packet captures, and forensic artifacts weren't altered after being seized?"**
 
 Standard syslog files, text logs, and ordinary database records are easy to modify or delete. Defense attorneys can challenge digital evidence simply by pointing out that anyone with root access could have altered timestamps, IP addresses, or payload bytes.
 
-**SecureEvidence** was built as a capstone project during the INSA Summer Camp to solve this problem by combining three technologies into one workflow:
+**SecureEvidence** was built as a graduation project during the CyberTalent Summer Camp to address this challenge by combining three technologies into one workflow:
 
 1. **AI Threat Detection Engine**: Classifies incoming network flows into 12 distinct threat categories using an **XGBoost** model trained on benchmark **CICIDS2017** data. It uses **TreeSHAP** to show exactly *which* network metrics (packet rate, flow duration, window size) caused the model to trigger an alert.
 2. **Big Data Processing Layer**: Simulates real-time telemetry ingestion using **Apache Spark Structured Streaming** and Kafka event streams, aggregating 1-minute window metrics to handle high-volume traffic.
 3. **Cryptographic Blockchain Ledger**: When an investigator verifies a threat, the system computes a deterministic **SHA-256 canonical hash** of the forensic record and anchors it to an **Ethereum smart contract** (`EvidenceTracker.sol`) alongside a local hash-chained SQLite ledger.
+
+> **Integrity Notice:** When `CHAIN_MODE=off`: *Ledger is tamper-evident against partial edits only; not anchored externally.* For tamper resistance against database-level manipulation, run in `CHAIN_MODE=local` or `CHAIN_MODE=sepolia` where transactions are anchored on-chain.
 
 If anyone modifies even a single byte of the evidence afterward, the recomputed hash fails to match the anchored record, immediately alerting the court to tampering.
 
@@ -105,7 +109,7 @@ If anyone modifies even a single byte of the evidence afterward, the recomputed 
 * **Traffic Replay**: Replays held-out CICIDS2017 flow streams for live, realistic testing.
 
 ### 4. Forensic Analyst Console (`frontend/`)
-* **INSA Official Visual Design**: Styled in official INSA Navy & Steel (#0B2A4A, #1F6FB2, #F3F6FA).
+* **Visual Design**: Professional Navy & Steel design system (#0B2A4A, #1F6FB2, #F3F6FA).
 * **Interactive Tamper Testing**: An integrated JSON editor lets investigators test what happens when a single byte is changed, showing the immediate cryptographic avalanche effect.
 * **Federal Court Certificates**: Generates official, exportable, and printable **FDRE Federal High Court Digital Evidence Certificates** referencing Ethiopian Proclamations.
 
@@ -151,7 +155,7 @@ Official court certificate generator providing judicial authorities with verifia
 
 ## ⚠️ Current Prototype Limitations & Future Production Roadmap
 
-While SecureEvidence is a fully functional end-to-end prototype, scaling it from an evaluation testbed to a nationwide operational deployment across INSA and the Federal High Court involves specific technical boundaries. Here is an honest breakdown of current design constraints and how each will be addressed in future phases:
+While SecureEvidence is a fully functional end-to-end prototype, scaling it from an evaluation testbed to a nationwide operational deployment across judiciary and forensic depositories involves specific technical boundaries. Here is an honest breakdown of current design constraints and how each will be addressed in future phases:
 
 | Component | Current Prototype Design | Planned Production Solution (Roadmap) |
 | :--- | :--- | :--- |
@@ -250,8 +254,8 @@ SecureEvidence/
 ## 🙏 Acknowledgments & Special Thanks
 
 I would like to express my sincere gratitude and appreciation to:
-* **Information Network Security Administration (INSA)**: For hosting the summer camp program, inspiring this project, and providing an incredible environment for learning advanced cyber defense technologies.
-* **INSA Summer Camp Crew & Staff**: For their dedication, tireless coordination, and continuous support throughout the program.
+* **CyberTalent Program**: For organizing the summer camp program, inspiring this project, and providing an incredible environment for learning advanced cyber defense technologies.
+* **Summer Camp Crew & Staff**: For their dedication, tireless coordination, and continuous support throughout the program.
 * **My Mentors**: A heartfelt thank you to **Mikiyas**, **Abreham**, **Inas**, **Hanamariam**, and **Selam** for their invaluable guidance, constructive critiques, and continuous mentorship across Artificial Intelligence, Big Data engineering, and Blockchain systems.
 
 ---

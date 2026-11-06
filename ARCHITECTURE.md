@@ -1,6 +1,6 @@
 # SecureEvidence System Architecture & Threat Model
 
-This document outlines the technical architecture, cryptographic verification mechanics, and STRIDE threat analysis for **SecureEvidence**, an AI threat detection and digital forensic evidence integrity platform designed for the Information Network Security Administration (INSA) of Ethiopia.
+This document outlines the technical architecture, cryptographic verification mechanics, and STRIDE threat analysis for **SecureEvidence**, an AI threat detection and digital forensic evidence integrity platform designed for sovereign cyber threat intelligence and court-admissible forensic evidence integrity.
 
 ---
 
@@ -88,7 +88,7 @@ SecureEvidence enforces strict non-repudiation and tamper detection across digit
 
 ## 5. Summary of Residual Risks
 
-1. **RPC Provider Trust**: A malicious or compromised RPC endpoint could spoof view queries (`getEvidenceRecord`). In production, INSA must run dedicated, authenticated validator nodes.
+1. **RPC Provider Trust**: A malicious or compromised RPC endpoint could spoof view queries (`getEvidenceRecord`). In production, dedicated, authenticated validator nodes must be operated.
 2. **Private Key Custody**: Storing `SUBMITTER_PRIVATE_KEY` in environment files is suitable only for testnets and demonstration. Production requires HSM-backed key management (FIPS 140-2 Level 3).
 3. **Public Testnet Reset & Reorganizations**: Public testnets (such as Sepolia) are subject to periodic deprecation, hard resets, and ephemeral chain reorgs. Long-term evidentiary preservation requires an Ethiopian national consortium network.
 4. **RFC 3161 Timestamping**: Server-generated ISO 8601 timestamps provide technical sequence tracking but lack external legal authority certification until integrated with a licensed Trust Service Provider (TSP).

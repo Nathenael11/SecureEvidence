@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SecureEvidence — INSA Forensics Console (Prototype)</title>
+    <title>SecureEvidence — Evidence Ledger Console (Prototype)</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2338bdf8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -20,10 +21,11 @@
             <button type="button" class="btn-sidebar-toggle" id="btn-sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle Navigation">
                 <i class="fa-solid fa-bars"></i>
             </button>
-            <div class="insa-brand">
-                <img src="/static/images/insa-logo-light.png" alt="INSA Logo" class="brand-logo" onerror="this.src='/static/images/insa-logo.png'">
-                <span class="agency-title" id="agency_title" style="display:none">INSA</span>
-                <span class="agency-subtitle" id="agency_subtitle" style="display:none">Information Network Security Administration</span>
+            <div class="brand-container" style="display:flex;align-items:center;gap:10px;">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="brand-shield-icon" aria-hidden="true">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <path d="m9 12 2 2 4-4"/>
+                </svg>
             </div>
             <div class="project-tag">
                 <span class="project-title" id="project_title">SecureEvidence</span>
@@ -714,14 +716,17 @@
         <div class="modal-dialog">
             <div class="cert-card">
                 <div class="cert-header">
-                    <div class="seal-container">
-                        <img src="/static/images/insa-emblem.png" alt="INSA Seal" class="cert-seal-img" onerror="this.src='/static/images/insa-logo.png'">
+                    <div class="seal-container" style="display:flex;align-items:center;justify-content:center;">
+                        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#1F6FB2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="cert-shield-svg" aria-label="Evidence Ledger Shield">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            <path d="m9 12 2 2 4-4"/>
+                        </svg>
                     </div>
                     <div class="cert-titles">
-                        <div class="cert-country" id="cert-country-title">Information Network Security Administration</div>
-                        <div class="cert-agency" id="cert-agency-title">Federal Democratic Republic of Ethiopia</div>
+                        <div class="cert-country" id="cert-country-title">Evidence Ledger</div>
+                        <div class="cert-agency" id="cert-agency-title">Digital Forensics &amp; Evidence Depository</div>
                         <div class="cert-rule"></div>
-                        <div class="cert-doc-title" id="cert-doc-header">Forensic evidence integrity certificate</div>
+                        <div class="cert-doc-title" id="cert-doc-header">Evidence Integrity Certificate</div>
                     </div>
                 </div>
 
@@ -771,7 +776,7 @@
                     <div class="cert-sig-block">
                         <div class="sig-line"></div>
                         <div class="sig-name">Certified Forensic Examiner</div>
-                        <div class="sig-role">Digital Forensics Directorate, INSA</div>
+                        <div class="sig-role">Digital Forensics Directorate</div>
                     </div>
                     <div class="cert-sig-block">
                         <div class="sig-line"></div>

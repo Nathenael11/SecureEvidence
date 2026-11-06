@@ -337,7 +337,7 @@ const SCENARIOS = {
         "Idle Std": 0.0,
         "Idle Max": 0.0,
         "Idle Min": 88799069.37,
-        "case_id": "INSA-CR-2026-HULK",
+        "case_id": "DEMO-CASE-2026-HULK",
         "label_description": "Real CICIDS2017 DoS Hulk sample flow (confirmed threat)",
         "true_label": "DoS Hulk",
         "model_confidence": 0.932,
@@ -425,7 +425,7 @@ const SCENARIOS = {
         "Idle Std": 0.0,
         "Idle Max": 0.0,
         "Idle Min": 0.0,
-        "case_id": "INSA-CR-2026-DDOS",
+        "case_id": "DEMO-CASE-2026-DDOS",
         "label_description": "Real CICIDS2017 DDoS sample flow from held-out test split (confirmed threat)",
         "true_label": "DDoS",
         "model_confidence": 1.0,
@@ -513,7 +513,7 @@ const SCENARIOS = {
         "Idle Std": 0.0,
         "Idle Max": 0.0,
         "Idle Min": 0.0,
-        "case_id": "INSA-CR-2026-DISPUTED",
+        "case_id": "DEMO-CASE-2026-DISPUTED",
         "label_description": "Real CICIDS2017 flow triggering model/rule conflict (requires analyst written justification)",
         "true_label": "PortScan",
         "model_confidence": 0.999,
@@ -601,7 +601,7 @@ const SCENARIOS = {
         "Idle Std": 0.0,
         "Idle Max": 0.0,
         "Idle Min": 0.0,
-        "case_id": "INSA-TEST-WEB_ATTACK",
+        "case_id": "DEMO-CASE-WEB_ATTACK",
         "label_description": "Real CICIDS2017 sample flow (pre-captured, synthetic assets)",
         "true_label": "Web_Attack",
         "model_prediction_category": "Web_Attack",
@@ -690,7 +690,7 @@ const SCENARIOS = {
         "Idle Std": 0.0,
         "Idle Max": 0.0,
         "Idle Min": 0.0,
-        "case_id": "INSA-TEST-SSH-PATATOR",
+        "case_id": "DEMO-CASE-SSH-PATATOR",
         "label_description": "Real CICIDS2017 sample flow (pre-captured, synthetic assets)",
         "true_label": "SSH-Patator",
         "model_prediction_category": "SSH-Patator",
@@ -779,7 +779,7 @@ const SCENARIOS = {
         "Idle Std": 0.0,
         "Idle Max": 0.0,
         "Idle Min": 0.0,
-        "case_id": "INSA-TEST-PORTSCAN",
+        "case_id": "DEMO-CASE-PORTSCAN",
         "label_description": "Real CICIDS2017 sample flow (pre-captured, synthetic assets)",
         "true_label": "PortScan",
         "model_prediction_category": "PortScan",
@@ -867,7 +867,7 @@ const SCENARIOS = {
         "Idle Std": 0.0,
         "Idle Max": 0.0,
         "Idle Min": 0.0,
-        "case_id": "INSA-TEST-BENIGN",
+        "case_id": "DEMO-CASE-BENIGN",
         "label_description": "Real CICIDS2017 sample flow (pre-captured, synthetic assets)",
         "true_label": "BENIGN",
         "model_prediction_category": "BENIGN",
@@ -1016,7 +1016,12 @@ function showToast(message, type = "info", action = null) {
     if (type === "success") icon = "fa-circle-check text-green";
     if (type === "error") icon = "fa-circle-xmark text-red";
     
-    toast.innerHTML = `<i class="fa-solid ${icon}"></i><span>${message}</span>`;
+    const iElem = document.createElement("i");
+    iElem.className = `fa-solid ${icon}`;
+    const spanElem = document.createElement("span");
+    spanElem.textContent = message;
+    toast.appendChild(iElem);
+    toast.appendChild(spanElem);
 
     if (action && action.text && typeof action.onClick === "function") {
         const btn = document.createElement("button");
@@ -1455,7 +1460,7 @@ function renderDetectionOutput(data, rawEvent) {
     const caseInp = document.getElementById('input_case_id');
         if (caseInp) caseInp.value = data.incident_id || '';
         currentEvidencePayload = {
-        incident_id: data.incident_id || `INSA-CR-${new Date().getUTCFullYear()}-${(data.fingerprint || Math.random().toString(16).substring(2,8)).slice(-6).toUpperCase()}`,
+        incident_id: data.incident_id || `DEMO-CASE-${new Date().getUTCFullYear()}-${(data.fingerprint || Math.random().toString(16).substring(2,8)).slice(-6).toUpperCase()}`,
         target_asset: rawEvent.target_asset,
         threat_category: data.threat_category,
         mitre_attack_id: data.mitre_attack_id,
@@ -1598,7 +1603,7 @@ async function resolveDisagreement(choice) {
     currentEvidencePayload.threat_category = chosenCat;
     currentEvidencePayload.severity = catInfo.severity;
     currentEvidencePayload.mitre_attack_id = currentDetectionResult.mitre_attack_id;
-    currentEvidencePayload.reviewed_by = currentUser ? (currentUser.full_name || currentUser.username) : "INSA Forensic Analyst";
+    currentEvidencePayload.reviewed_by = currentUser ? (currentUser.full_name || currentUser.username) : "Forensic Analyst";
     currentEvidencePayload.review_timestamp = new Date().toISOString();
     currentEvidencePayload.analyst_justification = justification.trim();
     currentEvidencePayload.review_decision = `Forensic analyst endorsed ${choice === 'rule' ? 'heuristic rule' : 'AI model'} (${chosenCat}). Justification: ${justification.trim()}`;
@@ -2040,7 +2045,19 @@ async function loadLedgerRecords() {
 
         const records = data.records || [];
 
-        // Update chain verification status badge
+        // Update chain verification status badge and honest off-chain disclaimer
+        const chainDisclaimerEl = document.getElementById('ledger-chain-disclaimer');
+        if (data.ledger_mode && (data.ledger_mode.includes('SQLITE') || data.ledger_mode.includes('OFF') || !data.is_live)) {
+            if (!chainDisclaimerEl) {
+                const notice = document.createElement('div');
+                notice.id = 'ledger-chain-disclaimer';
+                notice.style.cssText = "background: rgba(31, 111, 178, 0.1); border: 1px solid rgba(31, 111, 178, 0.3); color: var(--text-secondary); font-size: 11px; padding: 6px 12px; border-radius: 4px; margin-bottom: 12px; font-weight: 500;";
+                notice.textContent = "Ledger is tamper-evident against partial edits only; not anchored externally.";
+                const parentTableCard = document.querySelector('.registry-table-card') || tbody.closest('.card') || tbody.parentElement;
+                if (parentTableCard) parentTableCard.insertBefore(notice, parentTableCard.firstChild);
+            }
+        }
+
         const chainStatusEl = document.getElementById('ledger-chain-status');
         if (chainStatusEl) {
             try {
@@ -2091,20 +2108,20 @@ async function loadLedgerRecords() {
             tr.innerHTML = `
                 <td><strong class="text-amber font-mono">#${rec.block_number}</strong></td>
                 <td style="color: var(--text-secondary); font-family: var(--font-mono); white-space: nowrap;">${rec.timestamp}</td>
-                <td style="white-space: nowrap;"><span class="badge-status font-mono">${escHtml(rec.case_id)}</span> <button type="button" class="btn-copy-sm" onclick="navigator.clipboard.writeText('${escAttr(rec.case_id)}');showToast('Case ID copied!','info')" title="Copy Case ID" style="padding:1px 5px;font-size:11px;background:none;border:none;color:var(--se-steel);cursor:pointer;"><i class="fa-regular fa-copy"></i></button></td>
+                <td style="white-space: nowrap;"><span class="badge-status font-mono">${escHtml(rec.case_id)}</span> <button type="button" class="btn-copy-sm btn-copy-case" data-case-id="${escAttr(rec.case_id)}" title="Copy Case ID" style="padding:1px 5px;font-size:11px;background:none;border:none;color:var(--se-steel);cursor:pointer;"><i class="fa-regular fa-copy"></i></button></td>
                 <td><strong class="${incColorClass}">${escHtml(incType)}</strong>${disputeBadge}</td>
                 <td style="white-space: nowrap;">${escHtml(rec.target_asset || '')}</td>
                 <td style="white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis;" title="${escAttr(rec.investigator || '')}">${escHtml(rec.investigator || '')}</td>
                 <td style="white-space: nowrap;">${modeBadge}</td>
                 <td style="white-space: nowrap; min-width: 250px;">
                     <div style="display: flex; gap: 6px; flex-shrink: 0; white-space: nowrap;">
-                        <button type="button" class="btn-sm btn-outline" onclick="openCertificateModalWithHash('${rec.evidence_hash}')" title="View official certificate">
+                        <button type="button" class="btn-sm btn-outline btn-cert-modal" data-evidence-hash="${escAttr(rec.evidence_hash)}" title="View official certificate">
                             <i class="fa-solid fa-file-shield"></i> Certificate
                         </button>
-                        <button type="button" class="btn-sm btn-outline" onclick="downloadCertificateByHash('${rec.evidence_hash}')" title="Download official certificate">
+                        <button type="button" class="btn-sm btn-outline btn-cert-dl" data-evidence-hash="${escAttr(rec.evidence_hash)}" title="Download official certificate">
                             <i class="fa-solid fa-download"></i> Download
                         </button>
-                        <button type="button" class="btn-sm btn-outline" onclick="openCustodyModal('${rec.case_id}')">
+                        <button type="button" class="btn-sm btn-outline btn-custody" data-case-id="${escAttr(rec.case_id)}" title="View chain of custody">
                             <i class="fa-solid fa-link"></i> Custody
                         </button>
                     </div>
@@ -2112,6 +2129,39 @@ async function loadLedgerRecords() {
             `;
             tbody.appendChild(tr);
         });
+
+        if (!tbody.hasAttribute('data-delegation-attached')) {
+            tbody.setAttribute('data-delegation-attached', 'true');
+            tbody.addEventListener('click', (e) => {
+                const btnCustody = e.target.closest('.btn-custody');
+                if (btnCustody) {
+                    const cid = btnCustody.getAttribute('data-case-id');
+                    if (cid) openCustodyModal(cid);
+                    return;
+                }
+                const btnCertModal = e.target.closest('.btn-cert-modal');
+                if (btnCertModal) {
+                    const eh = btnCertModal.getAttribute('data-evidence-hash');
+                    if (eh) openCertificateModalWithHash(eh);
+                    return;
+                }
+                const btnCertDl = e.target.closest('.btn-cert-dl');
+                if (btnCertDl) {
+                    const eh = btnCertDl.getAttribute('data-evidence-hash');
+                    if (eh) downloadCertificateByHash(eh);
+                    return;
+                }
+                const btnCopy = e.target.closest('.btn-copy-case');
+                if (btnCopy) {
+                    const cid = btnCopy.getAttribute('data-case-id');
+                    if (cid && navigator.clipboard) {
+                        navigator.clipboard.writeText(cid);
+                        showToast('Case ID copied!', 'info');
+                    }
+                    return;
+                }
+            });
+        }
 
         const statEl = document.getElementById('stat-blocks-count');
         if (statEl) statEl.innerText = records.length;
@@ -2618,7 +2668,7 @@ async function downloadCertificateByHash(evidenceHash) {
         return;
     }
     const rec = ledgerRecordsMap[evidenceHash] || {};
-    const caseId = rec.case_id || "INSA-CERT";
+    const caseId = rec.case_id || "DEMO-CASE-CERT";
     const cleanCaseId = caseId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
     try {
@@ -2705,17 +2755,21 @@ async function openCustodyModal(caseId) {
                 <div class="custody-dot"></div>
                 <div class="custody-content">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <strong class="text-amber" style="font-size: 0.9rem;">#${entry.sequence} - ${entry.action.replace(/_/g, ' ')}</strong>
-                        <span class="font-mono" style="font-size: 0.75rem; color: #888;">${entry.timestamp}</span>
+                        <strong class="text-amber" style="font-size: 0.9rem;">#${escHtml(String(entry.sequence))} - ${escHtml((entry.action || '').replace(/_/g, ' '))}</strong>
+                        <span class="font-mono" style="font-size: 0.75rem; color: #888;">${escHtml(String(entry.timestamp || ''))}</span>
                     </div>
-                    <div style="font-size: 0.8rem; color: #ccc; margin: 4px 0;"><strong>Officer:</strong> ${entry.officer_id}</div>
-                    <div style="font-size: 0.75rem; color: #888; word-break: break-all;"><strong>SHA-256 Link:</strong> ${entry.entry_hash}</div>
+                    <div style="font-size: 0.8rem; color: #ccc; margin: 4px 0;"><strong>Officer:</strong> ${escHtml(String(entry.officer_id || ''))}</div>
+                    <div style="font-size: 0.75rem; color: #888; word-break: break-all;"><strong>SHA-256 Link:</strong> ${escHtml(String(entry.entry_hash || ''))}</div>
                 </div>
             `;
             list.appendChild(item);
         });
     } catch (e) {
-        list.innerHTML = `<div style="color: var(--red); padding: 10px;">Failed to load custody log: ${e.message}</div>`;
+        const errBox = document.createElement('div');
+        errBox.style.cssText = "color: var(--red); padding: 10px;";
+        errBox.textContent = `Failed to load custody log: ${e.message}`;
+        list.innerHTML = '';
+        list.appendChild(errBox);
     }
 }
 
@@ -2888,8 +2942,8 @@ function openCertificateModal() {
             return;
         }
         // Fallback demo certificate view so the sidebar action always presents the court certificate template
-        const caseId = "INSA-DEMO-CERT-01";
-        const investigator = (currentUser && (currentUser.full_name || currentUser.username)) || "INSA Forensic Analyst";
+        const caseId = "DEMO-CASE-CERT-01";
+        const investigator = (currentUser && (currentUser.full_name || currentUser.username)) || "Forensic Analyst";
         const hash = "e93ec967875b894044f92d87778b3ab5a1690ee0226bea830a23fd66feaa1582";
         const certBadge = document.getElementById('cert-ledger-badge');
         if (certBadge) {

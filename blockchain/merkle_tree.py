@@ -94,6 +94,34 @@ class MerkleTree:
             current_level = next_level
             self.levels.append(current_level)
 
+    def build_from_leaves(self, leaves: List[str]):
+        """Construct Merkle tree directly from pre-computed leaf hashes."""
+        self.raw_items = []
+        self.leaves = [l.lower() for l in leaves]
+        if not self.leaves:
+            self.levels = [[]]
+            return
+        current_level = list(self.leaves)
+        self.levels = [current_level]
+        while len(current_level) > 1:
+            next_level = []
+            i = 0
+            while i < len(current_level):
+                if i + 1 < len(current_level):
+                    next_level.append(self.hash_node(current_level[i], current_level[i + 1]))
+                    i += 2
+                else:
+                    next_level.append(current_level[i])
+                    i += 1
+            current_level = next_level
+            self.levels.append(current_level)
+
+    @classmethod
+    def from_leaves(cls, leaves: List[str]) -> "MerkleTree":
+        tree = cls()
+        tree.build_from_leaves(leaves)
+        return tree
+
     @property
     def root(self) -> str:
         """Return the 32-byte Merkle root hash (or 64 zero hex if empty)."""

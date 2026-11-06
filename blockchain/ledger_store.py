@@ -40,7 +40,9 @@ class LedgerStore(ABC):
         raw_artifact_sha256: Optional[str] = None,
         model_sha256: Optional[str] = None,
         officer_signature: Optional[str] = None,
-        timestamp_kind: str = "internal"
+        timestamp_kind: str = "internal",
+        signer_public_key: Optional[str] = None,
+        key_fingerprint: Optional[str] = None
     ) -> Dict[str, Any]:
         """Append a new evidence block to the hash chain."""
         pass
@@ -410,6 +412,75 @@ class SqliteLedgerStore(LedgerStore):
                             (2, datetime.now(timezone.utc).isoformat(), "Separate chain_receipts and chain_head_anchors tables")
                         )
 
+                    if current_ver < 3:
+                        conn.execute("""
+                            CREATE TABLE IF NOT EXISTS detection_incidents (
+                                incident_id TEXT PRIMARY KEY,
+                                created_at TEXT NOT NULL,
+                                target_asset TEXT,
+                                source_ip TEXT,
+                                destination_ip TEXT,
+                                threat_category TEXT,
+                                confidence REAL,
+                                is_threat INTEGER,
+                                has_disagreement INTEGER,
+                                prediction_json TEXT NOT NULL,
+                                filtered_event_json TEXT NOT NULL,
+                                review_json TEXT,
+                                reviewed_by_analyst INTEGER DEFAULT 0
+                            );
+                        """)
+                        conn.execute("CREATE INDEX IF NOT EXISTS idx_incidents_created ON detection_incidents(created_at);")
+
+                        conn.execute("""
+                            CREATE TABLE IF NOT EXISTS key_registry (
+                                officer_id TEXT PRIMARY KEY,
+                                public_key_pem TEXT NOT NULL,
+                                private_key_pem TEXT,
+                                key_fingerprint TEXT,
+                                created_at TEXT NOT NULL,
+                                active INTEGER DEFAULT 1
+                            );
+                        """)
+
+                        conn.execute("""
+                            CREATE TABLE IF NOT EXISTS signature_nonces (
+                                nonce TEXT PRIMARY KEY,
+                                officer_id TEXT NOT NULL,
+                                used_at TEXT NOT NULL
+                            );
+                        """)
+
+                        conn.execute("""
+                            CREATE TABLE IF NOT EXISTS merkle_batches (
+                                batch_id TEXT PRIMARY KEY,
+                                root_hash TEXT NOT NULL,
+                                leaf_hashes_json TEXT NOT NULL,
+                                tx_hash TEXT,
+                                block_number INTEGER,
+                                created_at TEXT NOT NULL
+                            );
+                        """)
+                        conn.execute("CREATE INDEX IF NOT EXISTS idx_merkle_root ON merkle_batches(root_hash);")
+
+                        cur = conn.execute("PRAGMA table_info(ledger_records)")
+                        existing_cols = {row[1] for row in cur.fetchall()}
+                        if "signer_public_key" not in existing_cols:
+                            conn.execute("ALTER TABLE ledger_records ADD COLUMN signer_public_key TEXT;")
+                        if "key_fingerprint" not in existing_cols:
+                            conn.execute("ALTER TABLE ledger_records ADD COLUMN key_fingerprint TEXT;")
+
+                        conn.execute(
+                            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+                            (3, datetime.now(timezone.utc).isoformat(), "Add detection_incidents, key_registry, signature_nonces, and merkle_batches")
+                        )
+
+                    # Always ensure tables exist
+                    conn.execute("CREATE TABLE IF NOT EXISTS detection_incidents (incident_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, target_asset TEXT, source_ip TEXT, destination_ip TEXT, threat_category TEXT, confidence REAL, is_threat INTEGER, has_disagreement INTEGER, prediction_json TEXT NOT NULL, filtered_event_json TEXT NOT NULL, review_json TEXT, reviewed_by_analyst INTEGER DEFAULT 0);")
+                    conn.execute("CREATE TABLE IF NOT EXISTS key_registry (officer_id TEXT PRIMARY KEY, public_key_pem TEXT NOT NULL, private_key_pem TEXT, key_fingerprint TEXT, created_at TEXT NOT NULL, active INTEGER DEFAULT 1);")
+                    conn.execute("CREATE TABLE IF NOT EXISTS signature_nonces (nonce TEXT PRIMARY KEY, officer_id TEXT NOT NULL, used_at TEXT NOT NULL);")
+                    conn.execute("CREATE TABLE IF NOT EXISTS merkle_batches (batch_id TEXT PRIMARY KEY, root_hash TEXT NOT NULL, leaf_hashes_json TEXT NOT NULL, tx_hash TEXT, block_number INTEGER, created_at TEXT NOT NULL);")
+
                     # Genesis Block check
                     cur = conn.execute("SELECT COUNT(*) FROM ledger_records")
                     if cur.fetchone()[0] == 0:
@@ -470,7 +541,9 @@ class SqliteLedgerStore(LedgerStore):
         raw_artifact_sha256: Optional[str] = None,
         model_sha256: Optional[str] = None,
         officer_signature: Optional[str] = None,
-        timestamp_kind: str = "internal"
+        timestamp_kind: str = "internal",
+        signer_public_key: Optional[str] = None,
+        key_fingerprint: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Atomically append an evidence record using BEGIN IMMEDIATE to prevent chain forks.
@@ -519,26 +592,51 @@ class SqliteLedgerStore(LedgerStore):
                 record_hash = compute_canonical_record_hash(record_data)
                 record_data["record_hash"] = record_hash
 
-                conn.execute("""
-                    INSERT INTO ledger_records (
-                        id, evidence_hash, raw_artifact_sha256, case_id, payload_canonical,
-                        model_sha256, officer_id, officer_signature, timestamp_utc,
-                        timestamp_kind, prev_hash, record_hash, status, superseded_by
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NULL)
-                """, (
-                    new_id,
-                    clean_hash,
-                    record_data["raw_artifact_sha256"],
-                    case_id,
-                    payload_canonical,
-                    record_data["model_sha256"],
-                    officer_id,
-                    record_data["officer_signature"],
-                    timestamp_utc,
-                    timestamp_kind,
-                    prev_hash,
-                    record_hash
-                ))
+                try:
+                    conn.execute("""
+                        INSERT INTO ledger_records (
+                            id, evidence_hash, raw_artifact_sha256, case_id, payload_canonical,
+                            model_sha256, officer_id, officer_signature, timestamp_utc,
+                            timestamp_kind, prev_hash, record_hash, status, superseded_by,
+                            signer_public_key, key_fingerprint
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NULL, ?, ?)
+                    """, (
+                        new_id,
+                        clean_hash,
+                        record_data["raw_artifact_sha256"],
+                        case_id,
+                        payload_canonical,
+                        record_data["model_sha256"],
+                        officer_id,
+                        record_data["officer_signature"],
+                        timestamp_utc,
+                        timestamp_kind,
+                        prev_hash,
+                        record_hash,
+                        signer_public_key,
+                        key_fingerprint
+                    ))
+                except sqlite3.OperationalError:
+                    conn.execute("""
+                        INSERT INTO ledger_records (
+                            id, evidence_hash, raw_artifact_sha256, case_id, payload_canonical,
+                            model_sha256, officer_id, officer_signature, timestamp_utc,
+                            timestamp_kind, prev_hash, record_hash, status, superseded_by
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NULL)
+                    """, (
+                        new_id,
+                        clean_hash,
+                        record_data["raw_artifact_sha256"],
+                        case_id,
+                        payload_canonical,
+                        record_data["model_sha256"],
+                        officer_id,
+                        record_data["officer_signature"],
+                        timestamp_utc,
+                        timestamp_kind,
+                        prev_hash,
+                        record_hash
+                    ))
 
                 conn.execute("COMMIT")
                 return self._row_to_dict(record_data)
@@ -676,6 +774,15 @@ class SqliteLedgerStore(LedgerStore):
                 d["target_asset"] = raw_evidence["target_asset"]
             if "investigator" in raw_evidence:
                 d["investigator"] = raw_evidence["investigator"]
+
+        if not d.get("signer_public_key") and d.get("officer_id"):
+            try:
+                key_entry = self.get_officer_key(d["officer_id"])
+                if key_entry:
+                    d["signer_public_key"] = key_entry.get("public_key_pem")
+                    d["key_fingerprint"] = key_entry.get("key_fingerprint")
+            except Exception:
+                pass
         return d
 
     def get_record_by_hash(self, evidence_hash: str) -> Optional[Dict[str, Any]]:
@@ -1169,6 +1276,187 @@ class SqliteLedgerStore(LedgerStore):
         finally:
             conn.close()
 
+    # --- Detection Incidents Methods ---
+    def save_detection_incident(self, incident: Dict[str, Any]) -> None:
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                with conn:
+                    conn.execute("""
+                        INSERT OR REPLACE INTO detection_incidents (
+                            incident_id, created_at, target_asset, source_ip, destination_ip,
+                            threat_category, confidence, is_threat, has_disagreement,
+                            prediction_json, filtered_event_json, review_json, reviewed_by_analyst
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        incident["incident_id"],
+                        incident.get("created_at") or datetime.now(timezone.utc).isoformat(),
+                        incident.get("target_asset", ""),
+                        incident.get("source_ip", ""),
+                        incident.get("destination_ip", ""),
+                        incident.get("threat_category", "UNKNOWN"),
+                        float(incident.get("confidence", 0.0)),
+                        1 if incident.get("is_threat") else 0,
+                        1 if incident.get("has_disagreement") else 0,
+                        json.dumps(incident.get("prediction", {})),
+                        json.dumps(incident.get("filtered_event", {})),
+                        json.dumps(incident.get("review")) if incident.get("review") else None,
+                        1 if incident.get("reviewed_by_analyst") else 0
+                    ))
+            finally:
+                conn.close()
+
+    def get_detection_incident(self, incident_id: str) -> Optional[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM detection_incidents WHERE incident_id = ?", (incident_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            if res.get("prediction_json"):
+                try:
+                    res["prediction"] = json.loads(res["prediction_json"])
+                except Exception:
+                    res["prediction"] = {}
+            if res.get("filtered_event_json"):
+                try:
+                    res["filtered_event"] = json.loads(res["filtered_event_json"])
+                except Exception:
+                    res["filtered_event"] = {}
+            if res.get("review_json"):
+                try:
+                    res["review"] = json.loads(res["review_json"])
+                except Exception:
+                    res["review"] = None
+            return res
+        finally:
+            conn.close()
+
+    def update_incident_review(self, incident_id: str, review_data: Dict[str, Any]) -> bool:
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                with conn:
+                    cur = conn.execute("""
+                        UPDATE detection_incidents
+                        SET review_json = ?, reviewed_by_analyst = 1, has_disagreement = 0
+                        WHERE incident_id = ?
+                    """, (json.dumps(review_data), incident_id))
+                    return cur.rowcount > 0
+            finally:
+                conn.close()
+
+    # --- Key Registry & Anti-Replay Nonces Methods ---
+    def save_officer_key(self, officer_id: str, public_key_pem: str, private_key_pem: Optional[str] = None, fingerprint: Optional[str] = None):
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                with conn:
+                    fp = fingerprint or hashlib.sha256(public_key_pem.encode('utf-8')).hexdigest()
+                    conn.execute("""
+                        INSERT OR REPLACE INTO key_registry (
+                            officer_id, public_key_pem, private_key_pem, key_fingerprint, created_at, active
+                        ) VALUES (?, ?, ?, ?, ?, 1)
+                    """, (
+                        officer_id,
+                        public_key_pem,
+                        private_key_pem,
+                        fp,
+                        datetime.now(timezone.utc).isoformat()
+                    ))
+            finally:
+                conn.close()
+
+    def get_officer_key(self, officer_id: str) -> Optional[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM key_registry WHERE officer_id = ? AND active = 1", (officer_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def record_signature_nonce(self, nonce: str, officer_id: str) -> bool:
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                with conn:
+                    cur = conn.execute("SELECT nonce FROM signature_nonces WHERE nonce = ?", (nonce,))
+                    if cur.fetchone() is not None:
+                        return False
+                    conn.execute(
+                        "INSERT INTO signature_nonces (nonce, officer_id, used_at) VALUES (?, ?, ?)",
+                        (nonce, officer_id, datetime.now(timezone.utc).isoformat())
+                    )
+                    return True
+            finally:
+                conn.close()
+
+    def is_signature_nonce_used(self, nonce: str) -> bool:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT nonce FROM signature_nonces WHERE nonce = ?", (nonce,))
+            return cur.fetchone() is not None
+        finally:
+            conn.close()
+
+    # --- Merkle Batches Persistence Methods ---
+    def save_merkle_batch(self, batch_id: str, root_hash: str, leaf_hashes: List[str], tx_hash: Optional[str] = None, block_number: Optional[int] = None):
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                with conn:
+                    conn.execute("""
+                        INSERT OR REPLACE INTO merkle_batches (
+                            batch_id, root_hash, leaf_hashes_json, tx_hash, block_number, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        batch_id,
+                        root_hash,
+                        json.dumps(leaf_hashes),
+                        tx_hash,
+                        block_number,
+                        datetime.now(timezone.utc).isoformat()
+                    ))
+            finally:
+                conn.close()
+
+    def get_merkle_batch_by_root(self, root_hash: str) -> Optional[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM merkle_batches WHERE root_hash = ?", (root_hash,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            if res.get("leaf_hashes_json"):
+                try:
+                    res["leaf_hashes"] = json.loads(res["leaf_hashes_json"])
+                except Exception:
+                    res["leaf_hashes"] = []
+            return res
+        finally:
+            conn.close()
+
+    def get_merkle_batch_by_leaf(self, leaf_hash: str) -> Optional[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM merkle_batches ORDER BY created_at DESC")
+            rows = cur.fetchall()
+            for r in rows:
+                batch = dict(r)
+                try:
+                    leaves = json.loads(batch.get("leaf_hashes_json", "[]"))
+                except Exception:
+                    leaves = []
+                if leaf_hash in leaves:
+                    batch["leaf_hashes"] = leaves
+                    return batch
+            return None
+        finally:
+            conn.close()
+
     def close(self):
         # sqlite3 connections in WAL mode are managed per query
         pass
@@ -1233,3 +1521,5 @@ def set_ledger_store(store: Optional[LedgerStore]):
     global _store_instance
     with _store_lock:
         _store_instance = store
+
+

@@ -194,10 +194,10 @@ def authenticate_user(username: str, password: str, db_path: Optional[str] = Non
 def seed_demo_accounts_if_needed(db_path: Optional[str] = None) -> Dict[str, str]:
     init_user_db(db_path)
     demo_accounts = [
-        ("demo_investigator", "INSA Senior Investigator", "investigator"),
-        ("demo_analyst", "INSA Forensic Analyst", "analyst"),
+        ("demo_investigator", "Senior Investigator", "investigator"),
+        ("demo_analyst", "Forensic Analyst", "analyst"),
         ("demo_auditor", "Federal High Court Auditor", "court_auditor"),
-        ("demo_admin", "INSA System Administrator", "system_admin"),
+        ("demo_admin", "System Administrator", "system_admin"),
     ]
     
     generated_passwords = {}

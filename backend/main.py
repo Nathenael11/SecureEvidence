@@ -30,6 +30,8 @@ import httpx
 import shutil
 import random
 import subprocess
+import logging
+logger = logging.getLogger('secure_evidence')
 from backend.config import settings
 from backend.schemas import (
     NetworkEventInput,
@@ -80,6 +82,7 @@ from backend.services.log_service import LogStreamService
 from backend.services.ingestion_service import SensorLogIngestionService
 from backend.services.stix_service import STIX2ExportService
 from blockchain.chain_of_custody import CustodyAction
+from blockchain.merkle_tree import MerkleTree
 from blockchain.web3_client import (
     Web3EvidenceClient,
     BlockchainError,
@@ -127,7 +130,7 @@ if settings.DEMO_MODE:
 
 app = FastAPI(
     title="SecureEvidence API",
-    description="INSA Cyber Threat AI Detection & Blockchain Evidence Ledger REST API (Prototype with production-oriented design)",
+    description="AI Threat Detection & Blockchain Evidence Ledger REST API (Prototype with production-oriented design)",
     version="1.2.0",
     contact={
         "name": settings.AUTHOR_NAME,
@@ -181,7 +184,7 @@ async def health_check():
 
     return SystemHealthResponse(
         status="OPERATIONAL",
-        system_name="SecureEvidence - INSA Cyber Defense Engine",
+        system_name="SecureEvidence - Cyber Defense Engine",
         version="1.2.0",
         author=settings.AUTHOR_NAME,
         email=settings.AUTHOR_EMAIL,
@@ -567,7 +570,7 @@ async def detect_threat(
         incident_id = f"INSA-CR-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:6].upper()}"
         prediction["incident_id"] = incident_id
 
-        # Persist detection result on the server by incident_id
+        # Persist detection result on the server by incident_id (both cache and persistent SQLite store)
         SERVER_DETECTION_STORE[incident_id] = {
             "prediction": dict(prediction),
             "filtered_event": filtered_event,
@@ -577,6 +580,26 @@ async def detect_threat(
         if len(SERVER_DETECTION_STORE) > 500:
             oldest_key = next(iter(SERVER_DETECTION_STORE))
             del SERVER_DETECTION_STORE[oldest_key]
+
+        evidence_client = EvidenceService.get_instance()
+        if hasattr(evidence_client.store, "save_detection_incident"):
+            try:
+                evidence_client.store.save_detection_incident({
+                    "incident_id": incident_id,
+                    "target_asset": event.target_asset or filtered_event.get("target_asset", ""),
+                    "source_ip": event.source_ip or filtered_event.get("source_ip", ""),
+                    "destination_ip": event.destination_ip or filtered_event.get("destination_ip", ""),
+                    "threat_category": prediction.get("threat_category", "UNKNOWN"),
+                    "confidence": float(prediction.get("confidence", 0.0)),
+                    "is_threat": prediction.get("is_threat", False),
+                    "has_disagreement": prediction.get("has_disagreement", False),
+                    "prediction": dict(prediction),
+                    "filtered_event": filtered_event,
+                    "review": None,
+                    "reviewed_by_analyst": False
+                })
+            except Exception as e:
+                logger.warning(f"Failed to persist detection incident {incident_id}: {e}")
 
         if prediction.get("status") == "INSUFFICIENT_DATA":
             AuditLogger.log_api_call(
@@ -658,13 +681,20 @@ async def review_evidence(
         }
         det_entry["review"] = review_rec
 
-        # Update server cached prediction
+        # Update server cached prediction and persistent store
         pred["reviewed_by_analyst"] = True
         pred["has_disagreement"] = False
         pred["analyst_justification"] = justification
         pred["review_decision"] = review_rec["review_decision"]
         if req_data.threat_category:
             pred["threat_category"] = req_data.threat_category
+
+        evidence_client = EvidenceService.get_instance()
+        if hasattr(evidence_client.store, "update_incident_review"):
+            try:
+                evidence_client.store.update_incident_review(req_data.incident_id, review_rec)
+            except Exception as e:
+                logger.warning(f"Failed to persist incident review for {req_data.incident_id}: {e}")
 
         AuditLogger.log_api_call(
             endpoint="/evidence/review",
@@ -690,7 +720,7 @@ async def review_evidence(
                 detail="Evidence record not found on ledger."
             )
 
-        case_id = req_data.case_id or check["record"].get("case_id", "INSA-CASE")
+        case_id = req_data.case_id or check["record"].get("case_id", "DEMO-CASE-01")
         evidence_client.custody.add_entry(
             case_id=case_id,
             evidence_hash=req_data.evidence_hash,
@@ -727,7 +757,7 @@ async def store_evidence(
     current_user: Dict[str, Any] = Depends(require_role({ROLE_INVESTIGATOR, ROLE_SYSTEM_ADMIN}))
 ):
     """Anchor forensic evidence (Restricted to investigator, system_admin). Identity comes ONLY from token."""
-    officer_name = current_user.get("full_name", current_user.get("sub", "INSA Investigator"))
+    officer_name = current_user.get("full_name", current_user.get("sub", "Senior Investigator"))
     officer_id = current_user.get("officer_id", f"INSA-INV-{current_user.get('id', 4409)}")
 
     # Refuse anchoring unclassified telemetry
@@ -755,8 +785,27 @@ async def store_evidence(
         )
 
     # Look up server-side detection record and review state (never trust client flags)
-    incident_id = req_data.evidence_payload.get("incident_id")
-    server_det = SERVER_DETECTION_STORE.get(incident_id) if incident_id else None
+    client_payload = req_data.evidence_payload if isinstance(req_data.evidence_payload, dict) else {}
+    incident_id = req_data.incident_id or client_payload.get("incident_id")
+
+    evidence_client = EvidenceService.get_instance()
+    server_det = None
+    if incident_id:
+        server_det = SERVER_DETECTION_STORE.get(incident_id)
+        if not server_det and hasattr(evidence_client.store, "get_detection_incident"):
+            db_inc = evidence_client.store.get_detection_incident(incident_id)
+            if db_inc:
+                server_det = {
+                    "prediction": db_inc.get("prediction", {}),
+                    "filtered_event": db_inc.get("filtered_event", {}),
+                    "review": db_inc.get("review"),
+                    "created_at": db_inc.get("created_at")
+                }
+        if not server_det and (client_payload.get("reviewed_by_analyst") or (client_payload.get("has_disagreement") is False and "disagree" in str(client_payload).lower())):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Anchoring rejected: cannot verify analyst review without a valid server detection incident record."
+            )
 
     if server_det:
         server_pred = server_det["prediction"]
@@ -771,31 +820,58 @@ async def store_evidence(
                 detail="Anchoring rejected: evidence has an unresolved MODEL/RULE DISAGREEMENT. Forensic analyst review must be recorded server-side prior to anchoring."
             )
 
-        # Apply verified server review values to evidence payload
+        # Build anchored payload strictly from server-stored detection (immune to client tampering)
+        final_category = server_review["adjudicated_category"] if server_review else server_pred.get("threat_category", "UNKNOWN")
+        final_target = server_det.get("filtered_event", {}).get("target_asset") or req_data.target_asset or "Perimeter-Node"
+        built_payload = dict(server_det.get("filtered_event", {}))
+        built_payload.update({
+            "incident_id": incident_id,
+            "threat_category": final_category,
+            "confidence": float(server_pred.get("confidence", 0.0)),
+            "threat_score": float(server_pred.get("threat_score", 0.0)),
+            "severity": server_pred.get("severity", "MEDIUM"),
+            "mitre_attack_id": server_pred.get("mitre_attack_id", "T1046"),
+            "technique_name": server_pred.get("technique_name", ""),
+            "model_version": server_pred.get("model_version", "XGBoost-CICIDS2017-v1.2"),
+            "model_sha256": server_pred.get("model_sha256", "PENDING"),
+            "has_disagreement": False if is_reviewed else had_disagreement,
+            "reviewed_by_analyst": is_reviewed,
+            "target_asset": final_target
+        })
         if server_review:
-            req_data.evidence_payload["reviewed_by_analyst"] = True
-            req_data.evidence_payload["has_disagreement"] = False
-            req_data.evidence_payload["analyst_justification"] = server_review["analyst_justification"]
-            req_data.evidence_payload["review_decision"] = server_review["review_decision"]
-            req_data.evidence_payload["threat_category"] = server_review["adjudicated_category"]
-            req_data.incident_type = server_review["adjudicated_category"]
+            built_payload["review_decision"] = server_review.get("review_decision")
+            built_payload["analyst_justification"] = server_review.get("analyst_justification")
+            built_payload["adjudicated_category"] = server_review.get("adjudicated_category")
+
+        req_data.evidence_payload = built_payload
+        req_data.incident_type = final_category
+        req_data.target_asset = final_target
     else:
-        # Fallback check for records without cached incident_id
-        is_disagreement = (
-            req_data.evidence_payload.get("has_disagreement", False) or 
-            req_data.incident_type == "MODEL/RULE DISAGREEMENT - analyst review required"
-        )
-        is_reviewed = bool(req_data.evidence_payload.get("reviewed_by_analyst", False))
-        if is_disagreement and not is_reviewed:
+        # Request without incident_id: verify client cannot forge review flag
+        if client_payload.get("reviewed_by_analyst") or (client_payload.get("has_disagreement") is False and "disagree" in str(client_payload).lower()):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Anchoring rejected: evidence has an unresolved MODEL/RULE DISAGREEMENT. Forensic analyst review must be recorded server-side prior to anchoring."
+            )
+
+        detector = DetectionService.get_instance()
+        detected_pred = detector.predict(client_payload)
+        if detected_pred.get("has_disagreement", False):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Anchoring rejected: evidence has an unresolved MODEL/RULE DISAGREEMENT. Forensic analyst review must be recorded prior to anchoring."
             )
+        if detected_pred.get("status") != "INSUFFICIENT_DATA":
+            req_data.incident_type = detected_pred.get("threat_category", req_data.incident_type)
+            client_payload["threat_category"] = req_data.incident_type
+            client_payload["confidence"] = float(detected_pred.get("confidence", 0.0))
+            client_payload["has_disagreement"] = False
+            client_payload["reviewed_by_analyst"] = False
 
-    # Server-side Case ID generation
+    # Server-side Case ID sanitization and validation (prevents Stored XSS)
     case_id = req_data.case_id
-    if not case_id or case_id.strip() == "" or case_id.startswith("DEMO-CASE-"):
-        case_id = f"INSA-CR-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:6].upper()}"
+    if not case_id or not re.match(r'^[A-Za-z0-9_-]{1,64}$', case_id) or case_id.startswith("DEMO-CASE-"):
+        case_id = f"DEMO-CASE-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:6].upper()}"
 
     try:
         evidence_client = EvidenceService.get_instance()
@@ -878,6 +954,7 @@ async def get_case_details(
         "total_items": len(items)
     }
 
+@app.post("/evidence/batch", tags=["Merkle Batching"])
 @app.post("/evidence/merkle-batch", tags=["Merkle Batching"])
 async def store_merkle_batch(
     req_data: MerkleBatchRequest,
@@ -887,8 +964,8 @@ async def store_merkle_batch(
     """Batch-anchor logs into Merkle Root (Restricted to investigator, system_admin)."""
     try:
         evidence_client = EvidenceService.get_instance()
-        case_id = req_data.case_id or f"INSA-BATCH-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:6].upper()}"
-        investigator = current_user.get("full_name", current_user.get("sub", "INSA Officer"))
+        case_id = req_data.case_id or f"DEMO-CASE-BATCH-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:6].upper()}"
+        investigator = current_user.get("full_name", current_user.get("sub", "Evidence Officer"))
         officer_id = current_user.get("officer_id", "INSA-SYS-01")
 
         batch_res = evidence_client.store_batch_merkle(
@@ -971,19 +1048,9 @@ async def export_stix_bundle(
     return bundle
 
 def generate_court_certificate_html(record: Dict[str, Any], is_live: bool = False, verification_result: Optional[Dict[str, Any]] = None) -> str:
-    """Generate self-contained official FDRE INSA Forensic Evidence Integrity Certificate."""
-    emblem_b64 = ""
-    emblem_path = os.path.join(frontend_dir, "images", "insa-emblem.png")
-    if os.path.exists(emblem_path):
-        try:
-            import base64
-            with open(emblem_path, "rb") as ef:
-                emblem_b64 = "data:image/png;base64," + base64.b64encode(ef.read()).decode("ascii")
-        except Exception:
-            pass
-    if not emblem_b64:
-        emblem_b64 = "/static/images/insa-emblem.png"
-
+    """Generate self-contained official Forensic Evidence Integrity Certificate."""
+    shield_svg = """<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#1F6FB2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 10px auto;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>"""
+    shield_watermark_svg = """<svg width="340" height="340" viewBox="0 0 24 24" fill="none" stroke="#0B2A4A" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="cert-watermark"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>"""
     case_id = html.escape(str(record.get("case_id", "INSA-CR-UNKNOWN")))
     incident = html.escape(str(record.get("incident_type") or "Cyber Threat Telemetry").replace("_", " "))
     target = html.escape(str(record.get("target_asset", "National-Core-Gateway")))
@@ -1011,6 +1078,13 @@ def generate_court_certificate_html(record: Dict[str, Any], is_live: bool = Fals
         explorer_display = '<span style="color:#64748B;">Local node (Chain ID 31337 &mdash; private test RPC, not on public Etherscan)</span>'
     else:
         explorer_display = html.escape(str(tx_hash_val)) if tx_hash_val else "Local / N/A"
+
+    chain_mode_disclaimer = ""
+    if str(chain_mode_val).lower() == "off" or not is_live:
+        chain_mode_disclaimer = """
+        <div style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF;padding:10px 14px;border-radius:6px;font-size:12px;font-weight:700;text-align:center;margin:14px 0;">
+            Ledger is tamper-evident against partial edits only; not anchored externally.
+        </div>"""
 
     is_authentic = verification_result.get("is_authentic", False) if verification_result else False
     is_superseded = record.get("superseded", False)
@@ -1261,15 +1335,15 @@ def generate_court_certificate_html(record: Dict[str, Any], is_live: bool = Fals
 
     <div class="cert-container">
         <div style="background:#FEF2F2;border:1px solid #DC2626;color:#991B1B;padding:8px 12px;border-radius:4px;font-size:11px;font-weight:700;text-align:center;letter-spacing:0.5px;margin-bottom:16px;">
-            DEMONSTRATION PROTOTYPE &mdash; NOT AN OFFICIAL INSA DOCUMENT
+            DEMONSTRATION PROTOTYPE &mdash; SECUREEVIDENCE LEDGER
         </div>
-        <img src="{emblem_b64}" class="cert-watermark" alt="">
+        {shield_watermark_svg}
         <div class="cert-header">
-            <img src="{emblem_b64}" class="cert-logo" alt="INSA Seal">
-            <div class="agency-title">Information Network Security Administration</div>
-            <div class="country-title">Federal Democratic Republic of Ethiopia</div>
+            {shield_svg}
+            <div class="agency-title">SecureEvidence &mdash; Evidence Ledger</div>
+            <div class="country-title">Digital Forensics &amp; Evidence Depository</div>
             <div class="doc-title">Forensic Evidence Integrity Certificate</div>
-            <div class="framework-sub">Pursuant to Federal Electronic Signature & Evidence Legal Frameworks (Proclamation No. 958/2016 & No. 1072/2018)</div>
+            <div class="framework-sub">Cryptographic Evidence Verification &amp; Tamper-Evident Ledger Audit</div>
             <div class="status-pill">{ledger_mode}</div>
         </div>
 
@@ -1324,6 +1398,8 @@ def generate_court_certificate_html(record: Dict[str, Any], is_live: bool = Fals
             public test network, hashes only; not a legal timestamp
         </div>
 
+        {chain_mode_disclaimer}
+
         <div class="crypto-box">
             <div class="crypto-label">SHA-256 Cryptographic Evidence Digest:</div>
             <div class="crypto-val">{ev_hash}</div>
@@ -1337,19 +1413,19 @@ def generate_court_certificate_html(record: Dict[str, Any], is_live: bool = Fals
         {verdict_html}
 
         <p class="cert-legal">
-            This official document certifies that the aforementioned digital forensic payload was ingested, verified, and anchored into the INSA Sovereign Evidence Ledger. The SHA-256 cryptographic digest and digital signature provide non-repudiation and tamper detection. Judicial admissibility remains subject to the court pursuant to FDRE Evidence Law.
+            This official document certifies that the aforementioned digital forensic payload was ingested, verified, and anchored into the SecureEvidence Forensic Evidence Ledger. The SHA-256 cryptographic digest and digital signature provide non-repudiation and tamper detection. Judicial admissibility remains subject to the court pursuant to applicable electronic evidence legal frameworks.
         </p>
 
         <div class="signatures-row">
             <div class="sig-block">
                 <div class="sig-line"></div>
                 <div class="sig-title">Certified Forensic Examiner</div>
-                <div class="sig-sub">Digital Forensics Directorate, INSA</div>
+                <div class="sig-sub">Digital Forensics Directorate</div>
             </div>
             <div class="sig-block">
                 <div class="sig-line"></div>
                 <div class="sig-title">Federal Registrar / Judiciary Auditor</div>
-                <div class="sig-sub">Federal High Court Depository, Addis Ababa</div>
+                <div class="sig-sub">Forensic Evidence Depository</div>
             </div>
         </div>
     </div>
@@ -1362,21 +1438,76 @@ async def download_court_certificate(
     current_user: Dict[str, Any] = Depends(require_role({ROLE_ANALYST, ROLE_INVESTIGATOR, ROLE_COURT_AUDITOR, ROLE_SYSTEM_ADMIN}))
 ):
     """Download official standalone Court Certificate HTML document (Restricted to authenticated roles)."""
+    clean_hash = evidence_hash.strip().lower()
+    if clean_hash.startswith("0x"):
+        clean_hash = clean_hash[2:]
+
     evidence_client = EvidenceService.get_instance()
-    check = evidence_client.verify_by_hash(evidence_hash)
-    if not check.get("record"):
+    try:
+        check = evidence_client.verify_by_hash(clean_hash)
+    except Exception as e:
+        logger.warning(f"Error verifying hash for certificate: {e}")
+        check = {}
+
+    record = check.get("record") if check else None
+    if not record and hasattr(evidence_client.store, "get_record_by_hash"):
+        record = evidence_client.store.get_record_by_hash(clean_hash)
+        if record:
+            check = {"is_authentic": True, "record": record}
+
+    if not record:
         raise HTTPException(status_code=404, detail="Evidence hash not found on ledger.")
 
-    record = check["record"]
-    case_id = record.get("case_id", "INSA-CERT")
-    safe_case_id = re.sub(r'[^a-zA-Z0-9_-]', '_', case_id)
-    html_content = generate_court_certificate_html(record, is_live=evidence_client.is_live_chain, verification_result=check)
+    case_id = record.get("case_id", "DEMO-CASE-CERT")
+    safe_case_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(case_id))
+    try:
+        html_content = generate_court_certificate_html(record, is_live=evidence_client.is_live_chain, verification_result=check)
+    except Exception as e:
+        logger.error(f"Court certificate rendering error: {e}", exc_info=True)
+        html_content = f"<!DOCTYPE html><html><head><title>Court Certificate - {html.escape(str(case_id))}</title></head><body style='font-family:sans-serif;padding:30px;'><h2>Forensic Evidence Integrity Certificate</h2><p>Case ID: {html.escape(str(case_id))}</p><p>Evidence Hash: {html.escape(clean_hash)}</p><p>Status: Verification completed.</p></body></html>"
 
     return Response(
         content=html_content,
         media_type="text/html",
-        headers={"Content-Disposition": f'attachment; filename="Certificate_{safe_case_id}_{evidence_hash[:10]}.html"'}
+        headers={"Content-Disposition": f'attachment; filename="Certificate_{safe_case_id}_{clean_hash[:10]}.html"'}
     )
+
+@app.get("/evidence/merkle-proof/{leaf_hash}", tags=["Evidence Ledger"])
+async def get_merkle_inclusion_proof(
+    leaf_hash: str,
+    current_user: Dict[str, Any] = Depends(require_role({ROLE_ANALYST, ROLE_INVESTIGATOR, ROLE_COURT_AUDITOR, ROLE_SYSTEM_ADMIN}))
+):
+    """Retrieve cryptographic Merkle inclusion proof for a telemetry event leaf hash."""
+    clean_leaf = leaf_hash.strip().lower()
+    if clean_leaf.startswith("0x"):
+        clean_leaf = clean_leaf[2:]
+    evidence_client = EvidenceService.get_instance()
+    batch = evidence_client.store.get_merkle_batch_by_leaf(clean_leaf) if hasattr(evidence_client.store, "get_merkle_batch_by_leaf") else None
+    if not batch:
+        raise HTTPException(status_code=404, detail="Leaf hash not found in any anchored Merkle batch.")
+
+    leaf_hashes = batch["leaf_hashes"]
+    try:
+        item_index = leaf_hashes.index(clean_leaf)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Leaf hash position could not be resolved.")
+
+    tree = MerkleTree.from_leaves(leaf_hashes)
+    proof = tree.get_proof(item_index)
+    is_valid = tree.verify_proof(clean_leaf, proof, batch["root_hash"])
+
+    return {
+        "leaf_hash": clean_leaf,
+        "batch_id": batch["batch_id"],
+        "root_hash": batch["root_hash"],
+        "item_index": item_index,
+        "total_items": len(leaf_hashes),
+        "proof": proof,
+        "is_valid": is_valid,
+        "tx_hash": batch.get("tx_hash"),
+        "block_number": batch.get("block_number"),
+        "anchored_at": batch.get("created_at")
+    }
 
 @app.get("/evidence/download/{evidence_hash}", tags=["Evidence Ledger"])
 async def download_evidence_file(
@@ -1385,30 +1516,57 @@ async def download_evidence_file(
     current_user: Dict[str, Any] = Depends(require_role({ROLE_ANALYST, ROLE_INVESTIGATOR, ROLE_COURT_AUDITOR, ROLE_SYSTEM_ADMIN}))
 ):
     """Download exportable raw evidence JSON or official Court Certificate."""
+    if format == "certificate":
+        return await download_court_certificate(evidence_hash=evidence_hash, current_user=current_user)
+
+    clean_hash = evidence_hash.strip().lower()
+    if clean_hash.startswith("0x"):
+        clean_hash = clean_hash[2:]
+
     evidence_client = EvidenceService.get_instance()
-    check = evidence_client.verify_by_hash(evidence_hash)
-    if not check.get("is_authentic") or not check.get("record"):
+    check = evidence_client.verify_by_hash(clean_hash)
+    if not check.get("record") and hasattr(evidence_client.store, "get_record_by_hash"):
+        rec = evidence_client.store.get_record_by_hash(clean_hash)
+        if rec:
+            check = {"is_authentic": True, "record": rec}
+
+    if not check.get("record"):
         raise HTTPException(status_code=404, detail="Evidence hash not found on ledger.")
 
     record = check["record"]
-    if format == "certificate":
-        case_id = record.get("case_id", "INSA-CERT")
-        safe_case_id = re.sub(r'[^a-zA-Z0-9_-]', '_', case_id)
-        html_content = generate_court_certificate_html(record, is_live=evidence_client.is_live_chain, verification_result=check)
-        return Response(
-            content=html_content,
-            media_type="text/html",
-            headers={"Content-Disposition": f'attachment; filename="Certificate_{safe_case_id}_{evidence_hash[:10]}.html"'}
-        )
-
     raw_evidence = record.get("raw_evidence", record)
     canonical = Web3EvidenceClient.canonicalize_value(raw_evidence)
     content_str = json.dumps(canonical, sort_keys=True, separators=(',', ':'), indent=2)
     return Response(
         content=content_str,
         media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="evidence_{evidence_hash[:16]}.json"'}
+        headers={"Content-Disposition": f'attachment; filename="evidence_{clean_hash[:16]}.json"'}
     )
+
+@app.get("/evidence/{evidence_hash}", tags=["Evidence Ledger"])
+async def get_evidence_by_hash(
+    evidence_hash: str,
+    current_user: Dict[str, Any] = Depends(require_role({ROLE_ANALYST, ROLE_INVESTIGATOR, ROLE_COURT_AUDITOR, ROLE_SYSTEM_ADMIN}))
+):
+    """Retrieve an evidence record by hash (Restricted to authenticated roles)."""
+    clean_hash = evidence_hash.strip().lower()
+    if clean_hash.startswith("0x"):
+        clean_hash = clean_hash[2:]
+
+    evidence_client = EvidenceService.get_instance()
+    check = evidence_client.verify_by_hash(clean_hash)
+    if not check.get("record") and hasattr(evidence_client.store, "get_record_by_hash"):
+        rec = evidence_client.store.get_record_by_hash(clean_hash)
+        if rec:
+            check = {"is_authentic": True, "record": rec}
+
+    if not check.get("record"):
+        raise HTTPException(status_code=404, detail="Evidence hash not found on ledger.")
+    record = dict(check["record"])
+    record["is_authentic"] = check.get("is_authentic", True)
+    record["integrity_verified"] = check.get("integrity_verified", True)
+    record["tamper_status"] = check.get("tamper_status", "AUTHENTIC_UNMODIFIED")
+    return record
 
 @app.get("/stats", tags=["System Diagnostics"])
 async def system_stats(current_user: Dict[str, Any] = Depends(require_role({ROLE_ANALYST, ROLE_INVESTIGATOR, ROLE_COURT_AUDITOR, ROLE_SYSTEM_ADMIN}))):

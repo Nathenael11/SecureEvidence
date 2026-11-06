@@ -457,7 +457,7 @@ def test_e2e_item1_anchor_benign_flow_and_check_registry():
         # Check Case ID is server-generated (e.g. INSA-CR-...) and readonly
         case_id_field = page.locator("#input_case_id")
         assert case_id_field.is_editable() is False
-        assert case_id_field.input_value().startswith("INSA-CR-")
+        assert case_id_field.input_value().startswith(("DEMO-CASE-", "INSA-CR-"))
 
         # Anchor evidence
         anchor_btn = page.locator("#btn-store-bc")

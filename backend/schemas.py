@@ -77,6 +77,7 @@ class DetectionResponse(BaseModel):
     model_version: str = "XGBoost-CICIDS2017-v1.2"
     model_sha256: str = "PENDING"
     dataset_benchmark: str = "CICIDS2017 (Canadian Institute for Cybersecurity)"
+    incident_id: Optional[str] = Field(default=None, description="Unique server-tracked detection incident identifier")
     reviewed_by_analyst: bool = False
     target_asset: str
     source_ip: str
@@ -85,13 +86,15 @@ class DetectionResponse(BaseModel):
 
 class EvidenceStoreRequest(BaseModel):
     """Schema for anchoring forensic evidence on the blockchain."""
-    case_id: Optional[str] = Field(default=None, description="INSA case identifier (e.g., INSA-CR-2026-0891)")
-    incident_type: str = Field(..., description="Threat classification category")
-    target_asset: str = Field(..., description="Impacted infrastructure asset")
-    investigator: Optional[str] = Field(default=None, description="Forensic Investigator")
-    officer_id: Optional[str] = Field(default=None, description="Certified Investigator ID")
-    evidence_payload: Dict[str, Any] = Field(..., description="Raw forensic telemetry & detection output")
-    raw_artifact_hash: Optional[str] = Field(None, description="SHA-256 of raw seized artifact (PCAP/disk)")
+    incident_id: Optional[str] = Field(default=None, description="Server-issued incident identifier from /detect")
+    notes: Optional[str] = Field(default=None, description="Investigator or analyst forensic notes")
+    case_id: Optional[str] = Field(default=None, description="Case identifier")
+    incident_type: Optional[str] = Field(default="SUSPICIOUS_TELEMETRY", description="Threat classification category")
+    target_asset: Optional[str] = Field(default="Perimeter-Node", description="Impacted infrastructure asset")
+    investigator: Optional[str] = Field(default=None, description="Forensic Investigator (overridden by auth token)")
+    officer_id: Optional[str] = Field(default=None, description="Certified Investigator ID (overridden by auth token)")
+    evidence_payload: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Forensic telemetry or detection payload")
+    raw_artifact_hash: Optional[str] = Field(default=None, description="SHA-256 of raw seized artifact (PCAP/disk)")
 
 class EvidenceVerifyRequest(BaseModel):
     """Schema for verifying digital evidence authenticity."""

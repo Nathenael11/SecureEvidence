@@ -29,18 +29,38 @@ class OfficerKeyManager:
     _demo_officer_private_vault: Dict[str, ec.EllipticCurvePrivateKey] = {}
     _registered_public_keys: Dict[str, str] = {}
     _revoked_officers: Set[str] = set()
+    _store: Any = None
 
+    @classmethod
+    def set_store(cls, store: Any):
+        cls._store = store
+
+    @classmethod
+    def get_store(cls) -> Any:
+        if cls._store is not None:
+            return cls._store
+        try:
+            from .ledger_store import get_ledger_store
+            cls._store = get_ledger_store()
+            return cls._store
+        except Exception:
+            return None
 
     @classmethod
     def register_officer_public_key(cls, officer_id: str, public_key_pem: str):
         """Register an officer's public key (production mode: officer keeps private key)."""
         cls._registered_public_keys[officer_id] = public_key_pem
+        store = cls.get_store()
+        if store and hasattr(store, "save_officer_key"):
+            try:
+                store.save_officer_key(officer_id, public_key_pem)
+            except Exception:
+                pass
 
     @classmethod
     def revoke_officer(cls, officer_id: str, reason: str = "Administrative revocation"):
         """Revoke an officer's signing privileges."""
         cls._revoked_officers.add(officer_id)
-
 
     @classmethod
     def is_revoked(cls, officer_id: str) -> bool:
@@ -50,10 +70,27 @@ class OfficerKeyManager:
     def get_or_create_demo_key(cls, officer_id: str) -> Tuple[ec.EllipticCurvePrivateKey, str]:
         """
         Server-side key generation for prototype demo only.
+        Persisted to SQLite key_registry across restarts.
         NOT FOR PRODUCTION.
         """
         if officer_id in cls._demo_officer_private_vault:
             return cls._demo_officer_private_vault[officer_id], cls._registered_public_keys[officer_id]
+
+        store = cls.get_store()
+        if store and hasattr(store, "get_officer_key"):
+            try:
+                record = store.get_officer_key(officer_id)
+                if record and record.get("private_key_pem"):
+                    priv_key = serialization.load_pem_private_key(
+                        record["private_key_pem"].encode('utf-8'),
+                        password=None
+                    )
+                    pub_pem = record["public_key_pem"]
+                    cls._demo_officer_private_vault[officer_id] = priv_key
+                    cls._registered_public_keys[officer_id] = pub_pem
+                    return priv_key, pub_pem
+            except Exception:
+                pass
 
         priv_key = ec.generate_private_key(ec.SECP256R1())
         pub_key = priv_key.public_key()
@@ -61,9 +98,21 @@ class OfficerKeyManager:
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         ).decode('utf-8')
+        priv_pem = priv_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        ).decode('utf-8')
 
         cls._demo_officer_private_vault[officer_id] = priv_key
         cls._registered_public_keys[officer_id] = pub_pem
+
+        if store and hasattr(store, "save_officer_key"):
+            try:
+                store.save_officer_key(officer_id, pub_pem, priv_pem)
+            except Exception:
+                pass
+
         return priv_key, pub_pem
 
     @classmethod
@@ -154,6 +203,7 @@ class OfficerKeyManager:
             if cls._registered_public_keys[officer_id].strip() != public_key_pem.strip():
                 return False
 
+        # Anti-replay: Strictly verify payload digest and reject bare-hash bypass
         try:
             pub_key = serialization.load_pem_public_key(public_key_pem.encode('utf-8'))
             sig_der = base64.b64decode(signature_b64)
@@ -161,14 +211,8 @@ class OfficerKeyManager:
             pub_key.verify(sig_der, payload_digest, ec.ECDSA(hashes.SHA256()))
             return True
         except (InvalidSignature, ValueError, Exception):
-            # Backward compatibility check for plain evidence_hash signature
-            try:
-                pub_key = serialization.load_pem_public_key(public_key_pem.encode('utf-8'))
-                sig_der = base64.b64decode(signature_b64)
-                pub_key.verify(sig_der, evidence_hash.encode('utf-8'), ec.ECDSA(hashes.SHA256()))
-                return True
-            except Exception:
-                return False
+            # Bare-hash fallback removed per security audit (defeats anti-replay nonce)
+            return False
 
     # Backwards compatibility alias
     @classmethod

@@ -118,6 +118,7 @@ class Web3EvidenceClient:
 
         # Ledger store interface (SqliteLedgerStore or MemoryLedgerStore)
         self.store: LedgerStore = store or get_ledger_store()
+        OfficerKeyManager.set_store(self.store)
 
         # In-memory mirrors for high-speed indexing & compatibility
         self.chain: List[Dict[str, Any]] = []
@@ -490,9 +491,9 @@ class Web3EvidenceClient:
             else:
                 # Send transaction to smart contract (hashes only: no payload, names or personal data)
                 raw_bytes32 = bytes.fromhex(raw_artifact_hash)
-                model_hash = raw_evidence.get("model_hash", "")
-                if model_hash and len(model_hash) == 64:
-                    merkle_bytes32 = bytes.fromhex(model_hash)
+                merkle_root = raw_evidence.get("merkle_root", "")
+                if merkle_root and len(merkle_root) == 64:
+                    merkle_bytes32 = bytes.fromhex(merkle_root)
                 else:
                     merkle_bytes32 = b'\x00' * 32
 
@@ -521,6 +522,8 @@ class Web3EvidenceClient:
         model_hash = raw_evidence.get("model_hash", "")
 
         # 4. Append record to SQLite LedgerStore
+        pub_pem = sig_info.get("public_key_pem")
+        fp = hashlib.sha256(pub_pem.encode('utf-8')).hexdigest() if pub_pem else None
         stored_block = self.store.append_record(
             evidence_hash=evidence_hash,
             case_id=case_id,
@@ -530,7 +533,9 @@ class Web3EvidenceClient:
             raw_artifact_sha256=raw_artifact_hash,
             model_sha256=model_hash,
             officer_signature=sig_info["signature_b64"],
-            timestamp_kind="internal"
+            timestamp_kind="internal",
+            signer_public_key=pub_pem,
+            key_fingerprint=fp
         )
 
         block_height = stored_block["id"]
@@ -978,6 +983,18 @@ class Web3EvidenceClient:
             investigator=investigator,
             officer_id=officer_id
         )
+
+        if hasattr(self.store, "save_merkle_batch"):
+            try:
+                self.store.save_merkle_batch(
+                    batch_id=batch_id,
+                    root_hash=root_hash,
+                    leaf_hashes=tree.leaves,
+                    tx_hash=anchor_res.get("tx_hash"),
+                    block_number=anchor_res.get("block_number")
+                )
+            except Exception:
+                pass
 
         return {
             "batch_id": batch_id,
