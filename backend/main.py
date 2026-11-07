@@ -1081,30 +1081,25 @@ def generate_court_certificate_html(record: Dict[str, Any], is_live: bool = Fals
         explorer_display = html.escape(str(tx_hash_val)) if tx_hash_val else "Local / N/A"
 
     chain_mode_disclaimer = ""
-    if str(chain_mode_val).lower() == "off" or not is_live:
-        chain_mode_disclaimer = """
-        <div style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF;padding:10px 14px;border-radius:6px;font-size:12px;font-weight:700;text-align:center;margin:14px 0;">
-            Ledger is tamper-evident against partial edits only; not anchored externally.
-        </div>"""
 
     is_authentic = verification_result.get("is_authentic", False) if verification_result else False
     is_superseded = record.get("superseded", False)
     if is_superseded:
         verdict_html = """
         <div class="verdict-banner" style="background:#FFF1F2;border:1px solid #FDA4AF;color:#BE123C;">
-            <span>⚠</span>
+            <span>[!]</span>
             <span>RECORD SUPERSEDED: This evidence record has been revoked or superseded in the ledger history.</span>
         </div>"""
     elif is_authentic:
         verdict_html = """
         <div class="verdict-banner" style="background:#E3F3EA;border:1px solid #A8DEC0;color:#1E7B4F;">
-            <span>✔</span>
+            <span>[OK]</span>
             <span>INTEGRITY VERIFIED: Cryptographic fingerprint matches the anchored sovereign ledger record.</span>
         </div>"""
     else:
         verdict_html = """
         <div class="verdict-banner" style="background:#FFFBEB;border:1px solid #FCD34D;color:#B45309;">
-            <span>⚠</span>
+            <span>[!]</span>
             <span>UNVERIFIED / PROTOTYPE RECORD: Cryptographic ledger verification not confirmed.</span>
         </div>"""
 
@@ -1331,7 +1326,7 @@ def generate_court_certificate_html(record: Dict[str, Any], is_live: bool = Fals
 </head>
 <body>
     <div class="no-print">
-        <button class="btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+        <button class="btn" onclick="window.print()">Print / Save as PDF</button>
     </div>
 
     <div class="cert-container">

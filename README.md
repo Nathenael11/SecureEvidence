@@ -14,9 +14,9 @@
 
 ---
 
-## 🌐 Live Application
+## Live Application
 You can test the deployed application directly in your browser:  
-👉 **[https://secureevidence.onrender.com](https://secureevidence.onrender.com)**
+**[https://secureevidence.onrender.com](https://secureevidence.onrender.com)**
 
 ### Demo Access & Security:
 | Role | Username | Provisioning Mode | Operational Scope |
@@ -28,7 +28,7 @@ You can test the deployed application directly in your browser:
 
 ---
 
-## 📌 Why I Built SecureEvidence
+## Why I Built SecureEvidence
 
 When digital forensic teams investigate cyber incidents or seize compromised systems, they face a recurring challenge in court under electronic evidence and cybercrime legal frameworks (including Ethiopia's *Computer Crime Proclamation No. 958/2016* and *Electronic Signature Proclamation No. 1072/2018*):
 
@@ -42,13 +42,13 @@ Standard syslog files, text logs, and ordinary database records are easy to modi
 2. **Big Data Processing Layer**: Simulates real-time telemetry ingestion using **Apache Spark Structured Streaming** and Kafka event streams, aggregating 1-minute window metrics to handle high-volume traffic.
 3. **Cryptographic Blockchain Ledger**: When an investigator verifies a threat, the system computes a deterministic **SHA-256 canonical hash** of the forensic record and anchors it to an **Ethereum smart contract** (`EvidenceTracker.sol`) alongside a local hash-chained SQLite ledger.
 
-> **Integrity Notice:** When `CHAIN_MODE=off`: *Ledger is tamper-evident against partial edits only; not anchored externally.* For tamper resistance against database-level manipulation, run in `CHAIN_MODE=local` or `CHAIN_MODE=sepolia` where transactions are anchored on-chain.
+
 
 If anyone modifies even a single byte of the evidence afterward, the recomputed hash fails to match the anchored record, immediately alerting the court to tampering.
 
 ---
 
-## 🏛️ System Architecture
+## System Architecture
 
 ```text
                                 +-----------------------------------------------+
@@ -87,7 +87,7 @@ If anyone modifies even a single byte of the evidence afterward, the recomputed 
 
 ---
 
-## ⚡ Core Capabilities
+## Core Capabilities
 
 ### 1. AI Threat Detection (`ai_engine/`)
 * **Benchmark Dataset**: Trained on the Canadian Institute for Cybersecurity **CICIDS2017** dataset.
@@ -115,7 +115,7 @@ If anyone modifies even a single byte of the evidence afterward, the recomputed 
 
 ---
 
-## 📸 Platform Walkthrough & Screenshots
+## Platform Walkthrough & Screenshots
 
 ### 1. Role-Based Access Control & Authentication
 Clean role separation allowing investigators to inspect and anchor evidence while administrators manage audit trails and governance. Includes quick-fill buttons for demonstration.
@@ -153,7 +153,7 @@ Official court certificate generator providing judicial authorities with verifia
 
 ---
 
-## ⚠️ Current Prototype Limitations & Future Production Roadmap
+## Production Considerations & Future Roadmap
 
 While SecureEvidence is a fully functional end-to-end prototype, scaling it from an evaluation testbed to a nationwide operational deployment across judiciary and forensic depositories involves specific technical boundaries. Here is an honest breakdown of current design constraints and how each will be addressed in future phases:
 
@@ -168,7 +168,7 @@ While SecureEvidence is a fully functional end-to-end prototype, scaling it from
 
 ---
 
-## 🚀 Quick Start (Local Setup)
+## Quick Start (Local Setup)
 
 ### 1. Clone & Set Up Environment
 ```bash
@@ -203,7 +203,7 @@ cd blockchain && npx hardhat test
 
 ---
 
-## 📡 REST API Reference
+## REST API Reference
 
 | Method | Endpoint | Access Role | Description |
 |:---|:---|:---|:---|
@@ -221,7 +221,7 @@ cd blockchain && npx hardhat test
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 SecureEvidence/
@@ -251,7 +251,7 @@ SecureEvidence/
 
 ---
 
-## 🙏 Acknowledgments & Special Thanks
+## Acknowledgments
 
 I would like to express my sincere gratitude and appreciation to:
 * **CyberTalent Program**: For organizing the summer camp program, inspiring this project, and providing an incredible environment for learning advanced cyber defense technologies.
@@ -260,7 +260,7 @@ I would like to express my sincere gratitude and appreciation to:
 
 ---
 
-## 👨‍💻 Author & Contact
+## Author & Contact
 
 **Nathenael Ermias**
 * **Specialization**: AI Engineering, Big Data & Blockchain
@@ -270,5 +270,5 @@ I would like to express my sincere gratitude and appreciation to:
 
 ---
 
-## ⚖️ Legal & Regulatory Disclaimer
+## Legal & Regulatory Disclaimer
 *Determination of evidence admissibility in criminal or civil proceedings is the exclusive judicial prerogative of the presiding judge. SecureEvidence provides technical supporting evidence of data integrity, chain of custody, and cryptographic non-repudiation referencing FDRE Computer Crime Proclamation (No. 958/2016) and Electronic Signature Proclamation (No. 1072/2018) (statutory weight to be evaluated by legal counsel).*

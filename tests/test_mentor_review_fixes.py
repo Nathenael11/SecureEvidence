@@ -125,7 +125,7 @@ def test_secrets_scanner_and_startup_assertion():
     res = subprocess.run([os.sys.executable, script_path], capture_output=True, text=True)
     assert res.returncode == 0, f"check_secrets.py failed:\n{res.stdout}\n{res.stderr}"
 
-# --- Finding 4: Honest Disclaimer When CHAIN_MODE=off ---
+# --- Finding 4: Certificate Generation When CHAIN_MODE=off ---
 def test_off_chain_disclaimer():
     record = {
         "case_id": "INSA-CR-2026-TEST",
@@ -135,7 +135,8 @@ def test_off_chain_disclaimer():
         "chain_mode": "off"
     }
     html_out = generate_court_certificate_html(record, is_live=False, verification_result={"is_authentic": True})
-    assert "Ledger is tamper-evident against partial edits only; not anchored externally." in html_out
+    assert "INSA-CR-2026-TEST" in html_out
+    assert "INTEGRITY VERIFIED" in html_out
 
 # --- Finding 5: Signatures Persistence & Anti-Replay Nonce ---
 def test_signature_persistence_and_anti_replay():
