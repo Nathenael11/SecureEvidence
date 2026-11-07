@@ -214,26 +214,54 @@ class Web3EvidenceClient:
             return
         from web3 import Web3
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        artifact_path = os.path.join(
-            base_dir,
-            "blockchain",
-            "artifacts",
-            "blockchain",
-            "contracts",
-            "EvidenceTracker.sol",
-            "EvidenceTracker.json"
-        )
-        if not os.path.exists(artifact_path):
-            return
+        abi = None
+
+        # Priority 1: Native Python contract ABI module (bundled in repository and container)
         try:
-            with open(artifact_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                abi = data.get("abi", [])
-                self.contract = self.web3.eth.contract(
-                    address=Web3.to_checksum_address(self.contract_address),
-                    abi=abi
-                )
+            from blockchain.contract_abi import EVIDENCE_TRACKER_ABI
+            abi = EVIDENCE_TRACKER_ABI
         except Exception:
+            pass
+
+        # Priority 2: Standalone ABI JSON in blockchain directory
+        if not abi:
+            abi_json_path = os.path.join(base_dir, "blockchain", "EvidenceTracker_abi.json")
+            if os.path.exists(abi_json_path):
+                try:
+                    with open(abi_json_path, "r", encoding="utf-8") as f:
+                        abi = json.load(f)
+                except Exception:
+                    pass
+
+        # Priority 3: Hardhat artifact JSON
+        if not abi:
+            artifact_path = os.path.join(
+                base_dir,
+                "blockchain",
+                "artifacts",
+                "blockchain",
+                "contracts",
+                "EvidenceTracker.sol",
+                "EvidenceTracker.json"
+            )
+            if os.path.exists(artifact_path):
+                try:
+                    with open(artifact_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        abi = data.get("abi", [])
+                except Exception:
+                    pass
+
+        if not abi:
+            return
+
+        try:
+            self.contract = self.web3.eth.contract(
+                address=Web3.to_checksum_address(self.contract_address),
+                abi=abi
+            )
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize contract at {self.contract_address}: {e}")
             self.contract = None
 
     def _try_connect_web3(self):
@@ -310,7 +338,7 @@ class Web3EvidenceClient:
             self.is_connected = False
             raise RpcDownError(f"Failed to communicate with RPC at {self.rpc_url}: {str(e)}")
 
-    def _send_signed_tx(self, func_call, gas_bound: int = 350000) -> Dict[str, Any]:
+    def _send_signed_tx(self, func_call, gas_bound: int = 1500000) -> Dict[str, Any]:
         """Send a signed transaction to the contract with nonce handling, gas bounds, confirmations, and backoff retries."""
         if not self.web3 or not self.account:
             raise BlockchainError("Web3 connection or submitter key not configured.")
@@ -320,10 +348,17 @@ class Web3EvidenceClient:
         for attempt in range(3):
             try:
                 nonce = w3.eth.get_transaction_count(self.account.address, 'pending')
-                gas_price = w3.eth.gas_price
+                gas_price = int(w3.eth.gas_price * 1.25) if self.chain_mode == "sepolia" else w3.eth.gas_price
+
+                # Dynamically estimate required gas with safety buffer
+                try:
+                    estimated_gas = func_call.estimate_gas({'from': self.account.address})
+                    tx_gas = min(int(estimated_gas * 1.25), 2000000)
+                except Exception:
+                    tx_gas = gas_bound
 
                 balance = w3.eth.get_balance(self.account.address)
-                required_wei = gas_price * gas_bound
+                required_wei = gas_price * tx_gas
                 if balance < required_wei:
                     raise InsufficientFundsError(
                         f"Submitter account {self.account.address} has {balance} wei; requires {required_wei} wei for gas"
@@ -332,7 +367,7 @@ class Web3EvidenceClient:
                 tx = func_call.build_transaction({
                     'from': self.account.address,
                     'nonce': nonce,
-                    'gas': gas_bound,
+                    'gas': tx_gas,
                     'gasPrice': gas_price,
                     'chainId': w3.eth.chain_id
                 })
@@ -341,7 +376,8 @@ class Web3EvidenceClient:
                 raw_tx_bytes = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction")
                 tx_hash = w3.eth.send_raw_transaction(raw_tx_bytes)
 
-                receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
+                wait_timeout = 120 if self.chain_mode == "sepolia" else 60
+                receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=wait_timeout)
                 if receipt.get("status") == 0:
                     raise BlockchainError(f"Transaction reverted on chain: {tx_hash.hex()}")
 
