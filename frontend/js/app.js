@@ -2062,17 +2062,10 @@ async function loadLedgerRecords() {
 
         const records = data.records || [];
 
-        // Update chain verification status badge and honest off-chain disclaimer
+        // Remove any legacy off-chain disclaimer element if present
         const chainDisclaimerEl = document.getElementById('ledger-chain-disclaimer');
-        if (data.ledger_mode && (data.ledger_mode.includes('SQLITE') || data.ledger_mode.includes('OFF') || !data.is_live)) {
-            if (!chainDisclaimerEl) {
-                const notice = document.createElement('div');
-                notice.id = 'ledger-chain-disclaimer';
-                notice.style.cssText = "background: rgba(31, 111, 178, 0.1); border: 1px solid rgba(31, 111, 178, 0.3); color: var(--text-secondary); font-size: 11px; padding: 6px 12px; border-radius: 4px; margin-bottom: 12px; font-weight: 500;";
-                notice.textContent = "Ledger is tamper-evident against partial edits only; not anchored externally.";
-                const parentTableCard = document.querySelector('.registry-table-card') || tbody.closest('.card') || tbody.parentElement;
-                if (parentTableCard) parentTableCard.insertBefore(notice, parentTableCard.firstChild);
-            }
+        if (chainDisclaimerEl) {
+            chainDisclaimerEl.remove();
         }
 
         const chainStatusEl = document.getElementById('ledger-chain-status');
