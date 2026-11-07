@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     CHAIN_RPC_URL: str = os.getenv("CHAIN_RPC_URL", os.getenv("RPC_URL", "http://127.0.0.1:8545"))
     CHAIN_ID: int = int(os.getenv("CHAIN_ID", "31337"))
     SUBMITTER_PRIVATE_KEY: str = os.getenv("SUBMITTER_PRIVATE_KEY", "")
-    EXPLORER_BASE_URL: str = os.getenv("EXPLORER_BASE_URL", "")
+    EXPLORER_BASE_URL: str = os.getenv("EXPLORER_BASE_URL", "https://sepolia.etherscan.io" if os.getenv("CHAIN_MODE", "").lower() == "sepolia" else "")
     CONFIRMATIONS: int = int(os.getenv("CONFIRMATIONS", "1" if os.getenv("CHAIN_MODE") == "local" else "2"))
     HEAD_ANCHOR_EVERY: int = int(os.getenv("HEAD_ANCHOR_EVERY", "10"))
     

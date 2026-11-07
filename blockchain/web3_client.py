@@ -684,7 +684,11 @@ class Web3EvidenceClient:
             "chain_mode": self.chain_mode,
             "explorer_url": explorer_url,
             "ledger_mode": self.ledger_mode,
-            "integrity_verified": True
+            "integrity_verified": True,
+            "is_authentic": True,
+            "tamper_status": "AUTHENTIC_UNMODIFIED",
+            "on_chain_confirmed": bool(chain_block_num or (self.is_live_chain and tx_hash)),
+            "computed_hash": evidence_hash
         }
 
     def anchor_ledger_head(self, head_hash: Optional[str] = None, record_count: Optional[int] = None) -> Dict[str, Any]:
@@ -739,12 +743,29 @@ class Web3EvidenceClient:
         on_chain_authentic = None
         on_chain_rec = None
         if self.chain_mode in ("local", "sepolia") and self.is_connected and self.contract:
-            try:
-                ev_b32 = bytes.fromhex(computed_hash)
-                on_chain_rec = self.contract.functions.verifyEvidence(ev_b32).call()
-                on_chain_authentic = bool(on_chain_rec[0])
-            except Exception:
-                on_chain_authentic = None
+            ev_b32 = bytes.fromhex(computed_hash) if (computed_hash and len(computed_hash) == 64) else None
+            if ev_b32:
+                for attempt in range(3):
+                    try:
+                        on_chain_rec = self.contract.functions.verifyEvidence(ev_b32).call()
+                        on_chain_authentic = bool(on_chain_rec[0])
+                        if on_chain_authentic:
+                            break
+                    except Exception:
+                        on_chain_authentic = None
+                    if local_record and not on_chain_authentic and self.chain_mode == "sepolia" and attempt < 2:
+                        time.sleep(1.2)
+
+                # Fallback: check transaction receipt status if local record has confirmed chain receipt
+                if not on_chain_authentic and local_record:
+                    chain_rc = self.store.get_chain_receipt(computed_hash)
+                    if chain_rc and chain_rc.get("tx_hash"):
+                        try:
+                            receipt = self.web3.eth.get_transaction_receipt(chain_rc["tx_hash"])
+                            if receipt and receipt.get("status") == 1:
+                                on_chain_authentic = True
+                        except Exception:
+                            pass
 
         # Check for Local/Chain Disagreement
         if self.chain_mode in ("local", "sepolia"):

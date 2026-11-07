@@ -481,6 +481,25 @@ class SqliteLedgerStore(LedgerStore):
                     conn.execute("CREATE TABLE IF NOT EXISTS signature_nonces (nonce TEXT PRIMARY KEY, officer_id TEXT NOT NULL, used_at TEXT NOT NULL);")
                     conn.execute("CREATE TABLE IF NOT EXISTS merkle_batches (batch_id TEXT PRIMARY KEY, root_hash TEXT NOT NULL, leaf_hashes_json TEXT NOT NULL, tx_hash TEXT, block_number INTEGER, created_at TEXT NOT NULL);")
 
+                    # Ensure detection_incidents has all required columns even if created by an earlier schema version
+                    cur_inc = conn.execute("PRAGMA table_info(detection_incidents)")
+                    inc_cols = {row[1] for row in cur_inc.fetchall()}
+                    for col_name, col_def in [
+                        ("threat_category", "TEXT"),
+                        ("confidence", "REAL"),
+                        ("is_threat", "INTEGER"),
+                        ("has_disagreement", "INTEGER"),
+                        ("reviewed_by_analyst", "INTEGER DEFAULT 0"),
+                        ("target_asset", "TEXT"),
+                        ("source_ip", "TEXT"),
+                        ("destination_ip", "TEXT"),
+                        ("prediction_json", "TEXT NOT NULL DEFAULT '{}'"),
+                        ("filtered_event_json", "TEXT NOT NULL DEFAULT '{}'"),
+                        ("review_json", "TEXT")
+                    ]:
+                        if col_name not in inc_cols:
+                            conn.execute(f"ALTER TABLE detection_incidents ADD COLUMN {col_name} {col_def};")
+
                     # Genesis Block check
                     cur = conn.execute("SELECT COUNT(*) FROM ledger_records")
                     if cur.fetchone()[0] == 0:
