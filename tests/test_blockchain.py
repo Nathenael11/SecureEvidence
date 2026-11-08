@@ -244,3 +244,30 @@ def test_shared_canonicalization_vectors_and_nan_inf_rejection():
         calculated = Web3EvidenceClient.calculate_evidence_hash(tv["input"])
         assert calculated == tv["expected_sha256"], f"Python hash mismatch on {tv['description']}"
 
+def test_get_all_records_chain_receipt_decoration():
+    """Verify get_all_records attaches on-chain receipt data when present."""
+    client = Web3EvidenceClient()
+    rec = client.store_evidence(
+        case_id="INSA-CR-CHAIN-DECORATE",
+        incident_type="DDoS",
+        target_asset="Gateway-01",
+        raw_evidence={"flow": 999},
+        investigator="Analyst"
+    )
+    ev_hash = rec["evidence_hash"]
+    client.store.save_chain_receipt(
+        evidence_hash=ev_hash,
+        tx_hash="0xabcd1234ef567890",
+        block_number=42,
+        block_hash="0x" + "1" * 64,
+        chain_id=11155111,
+        contract_address="0x2cD0b41b4F77d2BA99aD4c656dfC3c12e6712F4B"
+    )
+    records = client.get_all_records()
+    target_rec = next(r for r in records if r["evidence_hash"] == ev_hash)
+    assert target_rec["tx_hash"] == "0xabcd1234ef567890"
+    assert target_rec["chain_block_number"] == 42
+    assert target_rec["chain_id"] == 11155111
+    assert target_rec["is_on_chain"] is True
+    assert "SEPOLIA" in target_rec["ledger_mode"]
+

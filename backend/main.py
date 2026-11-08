@@ -204,7 +204,8 @@ async def health_check():
         chain_id=health_extra["chain_id"],
         block_number=health_extra["block_number"],
         contract_address=health_extra["contract_address"],
-        connected=health_extra["connected"]
+        connected=health_extra["connected"],
+        explorer_base_url=settings.EXPLORER_BASE_URL
     )
 
 @app.get("/ledger/verify-chain", tags=["Evidence Ledger"])

@@ -175,10 +175,26 @@ class Web3EvidenceClient:
             ev_hash = rec["evidence_hash"]
             cid = rec.get("case_id")
 
-            # Decorate for full compatibility
-            rec["contract_address"] = self.contract_address
-            rec["ledger_mode"] = self.ledger_mode
-            rec["tamper_proof_status"] = "VALID_ON_CHAIN" if self.is_live_chain else "VALID_IN_SIMULATED_LEDGER"
+            chain_rc = self.store.get_chain_receipt(ev_hash)
+            if chain_rc:
+                rec["tx_hash"] = chain_rc.get("tx_hash")
+                rec["chain_block_number"] = chain_rc.get("block_number")
+                rec["chain_id"] = chain_rc.get("chain_id") or self.chain_id
+                rec["contract_address"] = chain_rc.get("contract_address") or self.contract_address
+                rec["is_on_chain"] = True
+
+            rec["contract_address"] = rec.get("contract_address") or self.contract_address
+            if rec.get("tx_hash"):
+                if rec.get("chain_id") == 11155111 or self.chain_mode == "sepolia":
+                    rec["ledger_mode"] = "SQLITE + SEPOLIA TESTNET ANCHOR"
+                elif rec.get("chain_id") == 31337 or self.chain_mode == "local":
+                    rec["ledger_mode"] = "SQLITE + LOCAL CHAIN ANCHOR (HARDHAT NODE)"
+                else:
+                    rec["ledger_mode"] = self.ledger_mode
+            else:
+                rec["ledger_mode"] = self.ledger_mode
+
+            rec["tamper_proof_status"] = "VALID_ON_CHAIN" if (rec.get("tx_hash") or self.is_live_chain) else "VALID_IN_SIMULATED_LEDGER"
             rec["statutory_basis"] = "FDRE Proclamation No. 958/2016 and Proclamation No. 1072/2018 (to be verified by legal counsel)"
             rec["judicial_note"] = "Supporting forensic evidence. Judicial admissibility remains the sole prerogative of the court."
 
@@ -204,7 +220,10 @@ class Web3EvidenceClient:
                 "investigator": rec.get("investigator", "INSA Investigator"),
                 "officer_id": rec.get("officer_id"),
                 "officer_signature": rec.get("officer_signature"),
-                "ledger_mode": self.ledger_mode,
+                "tx_hash": rec.get("tx_hash"),
+                "chain_block_number": rec.get("chain_block_number"),
+                "is_on_chain": rec.get("is_on_chain", False),
+                "ledger_mode": rec["ledger_mode"],
                 "block_hash": rec["block_hash"]
             })
 
@@ -1085,30 +1104,52 @@ class Web3EvidenceClient:
         """Retrieve complete hash-linked custodial chain for an incident case."""
         return self.custody.get_timeline(case_id)
 
+    def _decorate_record(self, r: Dict[str, Any]) -> Dict[str, Any]:
+        cached = self.evidence_registry.get(r["evidence_hash"], {})
+        r["incident_type"] = r.get("incident_type") or cached.get("incident_type", "FORENSIC_TELEMETRY")
+        r["target_asset"] = r.get("target_asset") or cached.get("target_asset", "Target-Asset")
+        r["investigator"] = r.get("investigator") or cached.get("investigator", r.get("officer_id"))
+        
+        chain_rc = self.store.get_chain_receipt(r["evidence_hash"])
+        if chain_rc:
+            r["tx_hash"] = chain_rc.get("tx_hash")
+            r["chain_block_number"] = chain_rc.get("block_number")
+            r["chain_id"] = chain_rc.get("chain_id") or self.chain_id
+            r["contract_address"] = chain_rc.get("contract_address") or self.contract_address
+            r["is_on_chain"] = True
+        elif cached.get("tx_hash"):
+            r["tx_hash"] = cached.get("tx_hash")
+            r["chain_block_number"] = cached.get("chain_block_number")
+            r["chain_id"] = cached.get("chain_id") or self.chain_id
+            r["contract_address"] = cached.get("contract_address") or self.contract_address
+            r["is_on_chain"] = True
+
+        if r.get("tx_hash"):
+            if r.get("chain_id") == 11155111 or self.chain_mode == "sepolia":
+                r["ledger_mode"] = "SQLITE + SEPOLIA TESTNET ANCHOR"
+            elif r.get("chain_id") == 31337 or self.chain_mode == "local":
+                r["ledger_mode"] = "SQLITE + LOCAL CHAIN ANCHOR (HARDHAT NODE)"
+            else:
+                r["ledger_mode"] = self.ledger_mode
+        else:
+            r["ledger_mode"] = self.ledger_mode
+
+        if r.get("superseded_by_hash"):
+            r["superseded_by"] = r["superseded_by_hash"]
+        return r
+
     def get_all_records(self) -> List[Dict[str, Any]]:
         """Retrieve all stored evidence records sorted by timestamp descending."""
         records = self.store.get_all_records()
         for r in records:
-            cached = self.evidence_registry.get(r["evidence_hash"], {})
-            r["incident_type"] = r.get("incident_type") or cached.get("incident_type", "FORENSIC_TELEMETRY")
-            r["target_asset"] = r.get("target_asset") or cached.get("target_asset", "Target-Asset")
-            r["investigator"] = r.get("investigator") or cached.get("investigator", r.get("officer_id"))
-            r["ledger_mode"] = self.ledger_mode
-            if r.get("superseded_by_hash"):
-                r["superseded_by"] = r["superseded_by_hash"]
+            self._decorate_record(r)
         return records
 
     def get_records_by_case(self, case_id: str) -> List[Dict[str, Any]]:
         """Retrieve all evidence records linked to an INSA case ID."""
         records = self.store.get_records_by_case(case_id)
         for r in records:
-            cached = self.evidence_registry.get(r["evidence_hash"], {})
-            r["incident_type"] = r.get("incident_type") or cached.get("incident_type", "FORENSIC_TELEMETRY")
-            r["target_asset"] = r.get("target_asset") or cached.get("target_asset", "Target-Asset")
-            r["investigator"] = r.get("investigator") or cached.get("investigator", r.get("officer_id"))
-            r["ledger_mode"] = self.ledger_mode
-            if r.get("superseded_by_hash"):
-                r["superseded_by"] = r["superseded_by_hash"]
+            self._decorate_record(r)
         return records
 
     def get_chain_stats(self) -> Dict[str, Any]:

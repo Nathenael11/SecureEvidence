@@ -949,7 +949,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             const healthData = await healthRes.json();
             window.activeLedgerBackend = healthData.ledger_backend || 'sqlite';
             window.activeChainId = healthData.chain_id;
+            window.activeChainMode = healthData.chain_mode;
+            window.activeChainConnected = healthData.connected;
             window.activeContractAddress = healthData.contract_address;
+            window.activeExplorerBaseUrl = healthData.explorer_base_url || 'https://sepolia.etherscan.io';
             const banner = document.getElementById('demo-auth-banner');
             if (banner) {
                 if (healthData.demo_mode) {
@@ -1852,7 +1855,8 @@ function renderVerdict(result) {
     const sub = document.getElementById('verdict-sub');
     const hashEl = document.getElementById('verdict-hash');
     const statusEl = document.getElementById('verdict-status');
-    const isLive = (result.ledger_mode || '').includes('LIVE') || Boolean(result.on_chain_confirmed);
+    const modeUpper = (result.ledger_mode || '').toUpperCase();
+    const isLive = modeUpper.includes('LIVE') || modeUpper.includes('SEPOLIA') || modeUpper.includes('LOCAL') || modeUpper.includes('ANCHOR') || Boolean(result.on_chain_confirmed) || Boolean(result.tx_hash);
     const recordType = isLive ? "anchored chain record" : "ledger record";
 
     const onchainLine = document.getElementById('verdict-onchain-line');
@@ -1922,7 +1926,9 @@ function renderVerdict(result) {
                 const chainId = String(result.chain_id || window.activeChainId || '');
                 if (!isLive) {
                     onchainStatus.innerText = "simulated ledger confirmed";
-                } else if (chainId === '31337' || chainMode === 'local') {
+                } else if (chainId === '11155111' || chainMode === 'sepolia' || modeUpper.includes('SEPOLIA')) {
+                    onchainStatus.innerText = "sepolia testnet confirmed";
+                } else if (chainId === '31337' || chainMode === 'local' || modeUpper.includes('LOCAL')) {
                     onchainStatus.innerText = "local chain confirmed";
                 } else {
                     onchainStatus.innerText = "on-chain confirmed";
@@ -2036,7 +2042,9 @@ function updateLedgerChipUI(healthData) {
     if (healthData.chain_mode === 'local' && healthData.connected) {
         text = 'Ledger: SQLite + chain anchor (local node)';
     } else if (healthData.chain_mode === 'sepolia' && healthData.connected) {
-        text = 'Ledger: SQLite + chain anchor (Sepolia testnet)';
+        text = 'Ledger: SQLite + Sepolia (Live On-Chain)';
+    } else if (healthData.chain_mode === 'sepolia') {
+        text = 'Ledger: SQLite + Sepolia (Connecting...)';
     } else if (healthData.ledger_backend === 'memory') {
         text = 'Ledger: in-memory (resets on restart)';
     } else {
@@ -2105,9 +2113,28 @@ async function loadLedgerRecords() {
         records.forEach(rec => {
             ledgerRecordsMap[rec.evidence_hash] = rec;
             const tr = document.createElement('tr');
-            const mode = rec.ledger_mode || "SIMULATED LEDGER";
-            const isLive = mode.includes("LIVE");
-            const modeBadge = `<span class="badge-status ${isLive ? 'pill-live' : 'pill-simulated'}" style="font-size: 0.7rem;">${isLive ? 'LIVE CHAIN' : 'SIMULATED'}</span>`;
+            const mode = (rec.ledger_mode || "SIMULATED LEDGER").toUpperCase();
+            const hasTx = Boolean(rec.tx_hash);
+            const isSepolia = mode.includes("SEPOLIA") || rec.chain_id === 11155111 || window.activeChainId === 11155111 || window.activeChainMode === 'sepolia';
+            const isLocal = mode.includes("LOCAL") || rec.chain_id === 31337 || window.activeChainId === 31337 || window.activeChainMode === 'local';
+            const isLive = Boolean(hasTx || isSepolia || isLocal || mode.includes("LIVE") || mode.includes("ANCHOR") || rec.is_on_chain);
+
+            let modeBadge;
+            if (hasTx) {
+                const explorerBase = (window.activeExplorerBaseUrl || "https://sepolia.etherscan.io").replace(/\/$/, "");
+                const explorerUrl = (isSepolia || !isLocal)
+                    ? `${explorerBase}/tx/${rec.tx_hash}`
+                    : `javascript:void(0);`;
+                modeBadge = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="badge-status pill-live" style="font-size: 0.7rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" title="View on Sepolia Etherscan (${rec.tx_hash})"><i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.65rem;"></i> ${isSepolia ? 'SEPOLIA' : 'ON-CHAIN'}</a>`;
+            } else if (isLive && isSepolia) {
+                modeBadge = `<span class="badge-status pill-live" style="font-size: 0.7rem;">SEPOLIA</span>`;
+            } else if (isLive && isLocal) {
+                modeBadge = `<span class="badge-status pill-live" style="font-size: 0.7rem;">LOCAL CHAIN</span>`;
+            } else if (isLive) {
+                modeBadge = `<span class="badge-status pill-live" style="font-size: 0.7rem;">LIVE CHAIN</span>`;
+            } else {
+                modeBadge = `<span class="badge-status pill-simulated" style="font-size: 0.7rem;">SIMULATED</span>`;
+            }
 
             const incType = (rec.incident_type || '').replace(/_/g, ' ');
             const isBenign = (rec.incident_type || '').toUpperCase() === 'BENIGN';
@@ -2612,7 +2639,12 @@ async function handlePublicVerify() {
         const verdict = data.verdict || data.status;
 
         if (verdict === "INTEGRITY VERIFIED") {
-            const isLive = (data.ledger_mode || '').includes('LIVE');
+            const modeUpper = (data.ledger_mode || '').toUpperCase();
+            const hasTx = Boolean(data.tx_hash);
+            const isSepolia = modeUpper.includes("SEPOLIA") || data.chain_id === 11155111 || window.activeChainId === 11155111 || window.activeChainMode === 'sepolia';
+            const isLocal = modeUpper.includes("LOCAL") || data.chain_id === 31337 || window.activeChainId === 31337 || window.activeChainMode === 'local';
+            const isLive = Boolean(hasTx || isSepolia || isLocal || modeUpper.includes("LIVE") || modeUpper.includes("ANCHOR") || data.is_on_chain);
+            const liveText = isSepolia ? 'SEPOLIA ON-CHAIN' : (isLocal ? 'LOCAL CHAIN' : 'LIVE CHAIN');
             resultBox.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                     <i class="fa-solid fa-circle-check text-green" style="font-size: 1.4rem;"></i>
@@ -2622,7 +2654,7 @@ async function handlePublicVerify() {
                     <div><strong>Evidence Hash:</strong> <span class="font-mono text-white">${data.evidence_hash}</span></div>
                     <div><strong>Block Height:</strong> <span class="text-green">#${data.block_number !== undefined ? data.block_number : 'N/A'}</span></div>
                     <div><strong>Anchor Time:</strong> <span class="font-mono text-white">${data.anchor_timestamp || 'N/A'}</span></div>
-                    <div><strong>Ledger Mode:</strong> <span class="badge-status ${isLive ? 'pill-live' : 'pill-simulated'}">${isLive ? 'LIVE CHAIN' : 'SIMULATED LEDGER'}</span></div>
+                    <div><strong>Ledger Mode:</strong> <span class="badge-status ${isLive ? 'pill-live' : 'pill-simulated'}">${isLive ? liveText : 'SIMULATED LEDGER'}</span></div>
                     <div><strong>Status:</strong> <span class="text-green">ACTIVE / UNMODIFIED</span></div>
                     <div style="margin-top: 6px; font-size: 0.75rem; color: #888;">${data.legal_framework || 'FDRE Proclamations No. 958/2016 and No. 1072/2018 (to be verified by legal counsel)'}</div>
                 </div>
@@ -2978,13 +3010,23 @@ function openCertificateModal() {
     const hash = (lastAnchoredBlock && lastAnchoredBlock.evidence_hash) || (document.getElementById('verdict-hash') ? document.getElementById('verdict-hash').innerText : "") || "Awaiting hash calculation";
     
     const mode = (lastAnchoredBlock && lastAnchoredBlock.ledger_mode) || "SIMULATED LEDGER";
-    const isLive = mode.includes("LIVE");
+    const hasTx = Boolean(lastAnchoredBlock && lastAnchoredBlock.tx_hash);
+    const modeUpper = mode.toUpperCase();
+    const isSepolia = modeUpper.includes("SEPOLIA") || (lastAnchoredBlock && lastAnchoredBlock.chain_id === 11155111) || window.activeChainId === 11155111 || window.activeChainMode === 'sepolia';
+    const isLocal = modeUpper.includes("LOCAL") || (lastAnchoredBlock && lastAnchoredBlock.chain_id === 31337) || window.activeChainId === 31337 || window.activeChainMode === 'local';
+    const isLive = Boolean(hasTx || isSepolia || isLocal || modeUpper.includes("LIVE") || modeUpper.includes("ANCHOR"));
     const certBadge = document.getElementById('cert-ledger-badge');
     const backend = window.activeLedgerBackend || 'sqlite';
     const simBadgeText = (backend === 'sqlite') ? 'SQLITE LEDGER (HASH-CHAINED)' : 'SIMULATED LEDGER';
     if (certBadge) {
         certBadge.className = `badge-status ${isLive ? 'pill-live' : 'pill-simulated'}`;
-        certBadge.innerText = isLive ? 'LIVE CHAIN' : simBadgeText;
+        let liveBadgeText = 'LIVE CHAIN';
+        if (isSepolia) {
+            liveBadgeText = 'SEPOLIA TESTNET ANCHOR';
+        } else if (isLocal) {
+            liveBadgeText = 'LOCAL CHAIN ANCHOR';
+        }
+        certBadge.innerText = isLive ? liveBadgeText : simBadgeText;
     }
 
     document.getElementById('cert-case-id').innerText = caseId;
@@ -3007,7 +3049,10 @@ function openCertificateModal() {
     if (cBlk) cBlk.innerText = `#${(lastAnchoredBlock && (lastAnchoredBlock.chain_block_number || lastAnchoredBlock.block_number)) || 1}`;
     if (cExp) {
         if (lastAnchoredBlock && lastAnchoredBlock.explorer_url) {
-            cExp.innerHTML = `<a href="${lastAnchoredBlock.explorer_url}" target="_blank" style="color:var(--blue-400);text-decoration:underline;">View on explorer</a>`;
+            cExp.innerHTML = `<a href="${lastAnchoredBlock.explorer_url}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);text-decoration:underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> View on Sepolia Etherscan</a>`;
+        } else if (lastAnchoredBlock && lastAnchoredBlock.tx_hash) {
+            const expBase = (window.activeExplorerBaseUrl || "https://sepolia.etherscan.io").replace(/\/$/, "");
+            cExp.innerHTML = `<a href="${expBase}/tx/${lastAnchoredBlock.tx_hash}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);text-decoration:underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> View on Sepolia Etherscan</a>`;
         } else {
             const chainIdVal = String((lastAnchoredBlock && lastAnchoredBlock.chain_id) || window.activeChainId || '');
             if (chainIdVal === '31337' || window.activeChainMode === 'local') {
@@ -3027,13 +3072,23 @@ function openCertificateModalWithHash(hash) {
         return;
     }
     const mode = rec.ledger_mode || "SIMULATED LEDGER";
-    const isLive = mode.includes("LIVE");
+    const hasTx = Boolean(rec.tx_hash);
+    const modeUpper = mode.toUpperCase();
+    const isSepolia = modeUpper.includes("SEPOLIA") || rec.chain_id === 11155111 || window.activeChainId === 11155111 || window.activeChainMode === 'sepolia';
+    const isLocal = modeUpper.includes("LOCAL") || rec.chain_id === 31337 || window.activeChainId === 31337 || window.activeChainMode === 'local';
+    const isLive = Boolean(hasTx || isSepolia || isLocal || modeUpper.includes("LIVE") || modeUpper.includes("ANCHOR"));
     const certBadge = document.getElementById('cert-ledger-badge');
     const backend = window.activeLedgerBackend || 'sqlite';
     const simBadgeText = (backend === 'sqlite') ? 'SQLITE LEDGER (HASH-CHAINED)' : 'SIMULATED LEDGER';
     if (certBadge) {
         certBadge.className = `badge-status ${isLive ? 'pill-live' : 'pill-simulated'}`;
-        certBadge.innerText = isLive ? 'LIVE CHAIN' : simBadgeText;
+        let liveBadgeText = 'LIVE CHAIN';
+        if (isSepolia) {
+            liveBadgeText = 'SEPOLIA TESTNET ANCHOR';
+        } else if (isLocal) {
+            liveBadgeText = 'LOCAL CHAIN ANCHOR';
+        }
+        certBadge.innerText = isLive ? liveBadgeText : simBadgeText;
     }
 
     document.getElementById('cert-case-id').innerText = rec.case_id;
@@ -3056,7 +3111,10 @@ function openCertificateModalWithHash(hash) {
     if (cBlk2) cBlk2.innerText = `#${rec.chain_block_number || rec.block_number || 1}`;
     if (cExp2) {
         if (rec.explorer_url) {
-            cExp2.innerHTML = `<a href="${rec.explorer_url}" target="_blank" style="color:var(--blue-400);text-decoration:underline;">View on explorer</a>`;
+            cExp2.innerHTML = `<a href="${rec.explorer_url}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);text-decoration:underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> View on Sepolia Etherscan</a>`;
+        } else if (rec.tx_hash) {
+            const expBase = (window.activeExplorerBaseUrl || "https://sepolia.etherscan.io").replace(/\/$/, "");
+            cExp2.innerHTML = `<a href="${expBase}/tx/${rec.tx_hash}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);text-decoration:underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> View on Sepolia Etherscan</a>`;
         } else {
             const chainIdVal2 = String(rec.chain_id || window.activeChainId || '');
             if (chainIdVal2 === '31337' || (rec.chain_mode === 'local') || window.activeChainMode === 'local') {

@@ -13,6 +13,23 @@ AUTHOR_EMAIL: str = os.getenv("AUTHOR_EMAIL", "nathenaelermias13@gmail.com")
 DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "yes")
 FEATURE_COVERAGE_THRESHOLD: float = float(os.getenv("FEATURE_COVERAGE_THRESHOLD", "0.60"))
 
+# Blockchain auto-detection and defaults
+_raw_rpc: str = os.getenv("CHAIN_RPC_URL") or os.getenv("RPC_URL") or "http://127.0.0.1:8545"
+_raw_chain_mode: str = (os.getenv("CHAIN_MODE") or "").strip().lower()
+_is_sepolia: bool = (
+    _raw_chain_mode == "sepolia"
+    or os.getenv("CHAIN_ID") == "11155111"
+    or any(x in _raw_rpc.lower() for x in ("sepolia", "alchemy.com", "infura.io", "quicknode"))
+)
+_effective_chain_mode: str = "sepolia" if _is_sepolia else ("local" if _raw_chain_mode == "local" else "off")
+_default_chain_id: int = 11155111 if _effective_chain_mode == "sepolia" else 31337
+_default_contract: str = (
+    "0x2cD0b41b4F77d2BA99aD4c656dfC3c12e6712F4B"
+    if _effective_chain_mode == "sepolia"
+    else "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+)
+_default_explorer: str = "https://sepolia.etherscan.io" if _effective_chain_mode == "sepolia" else ""
+
 class Settings(BaseSettings):
     model_config = ConfigDict(env_file=".env", extra="ignore")
 
@@ -31,14 +48,14 @@ class Settings(BaseSettings):
     MODELS_DIR: str = os.path.join(BASE_DIR, "ai_engine", "models")
     
     # Blockchain Settings
-    RPC_URL: str = os.getenv("RPC_URL", "http://127.0.0.1:8545")
-    CONTRACT_ADDRESS: str = os.getenv("CONTRACT_ADDRESS", "0x5FbDB2315678afecb367f032d93F642f64180aa3")
-    CHAIN_MODE: str = os.getenv("CHAIN_MODE", "off").lower()
-    CHAIN_RPC_URL: str = os.getenv("CHAIN_RPC_URL", os.getenv("RPC_URL", "http://127.0.0.1:8545"))
-    CHAIN_ID: int = int(os.getenv("CHAIN_ID", "31337"))
+    RPC_URL: str = _raw_rpc
+    CONTRACT_ADDRESS: str = os.getenv("CONTRACT_ADDRESS", _default_contract)
+    CHAIN_MODE: str = os.getenv("CHAIN_MODE", _effective_chain_mode).lower()
+    CHAIN_RPC_URL: str = os.getenv("CHAIN_RPC_URL", _raw_rpc)
+    CHAIN_ID: int = int(os.getenv("CHAIN_ID", str(_default_chain_id)))
     SUBMITTER_PRIVATE_KEY: str = os.getenv("SUBMITTER_PRIVATE_KEY", "")
-    EXPLORER_BASE_URL: str = os.getenv("EXPLORER_BASE_URL", "https://sepolia.etherscan.io" if os.getenv("CHAIN_MODE", "").lower() == "sepolia" else "")
-    CONFIRMATIONS: int = int(os.getenv("CONFIRMATIONS", "1" if os.getenv("CHAIN_MODE") == "local" else "2"))
+    EXPLORER_BASE_URL: str = os.getenv("EXPLORER_BASE_URL", _default_explorer)
+    CONFIRMATIONS: int = int(os.getenv("CONFIRMATIONS", "1" if _effective_chain_mode == "local" else "2"))
     HEAD_ANCHOR_EVERY: int = int(os.getenv("HEAD_ANCHOR_EVERY", "10"))
     
     # Security & JWT Settings

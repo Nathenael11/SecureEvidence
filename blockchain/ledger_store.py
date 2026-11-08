@@ -838,18 +838,40 @@ class SqliteLedgerStore(LedgerStore):
     def get_record_by_id(self, block_id: int) -> Optional[Dict[str, Any]]:
         conn = self._get_connection()
         try:
-            cur = conn.execute("SELECT * FROM ledger_records WHERE id = ?", (block_id,))
+            cur = conn.execute("""
+                SELECT lr.*, cr.tx_hash, cr.block_number AS chain_block_number, cr.chain_id, cr.contract_address AS chain_contract_address
+                FROM ledger_records lr
+                LEFT JOIN chain_receipts cr ON lr.evidence_hash = cr.evidence_hash
+                WHERE lr.id = ?
+            """, (block_id,))
             row = cur.fetchone()
-            return self._row_to_dict(row) if row else None
+            if not row:
+                return None
+            res = self._row_to_dict(row)
+            if res and res.get("tx_hash"):
+                res["is_on_chain"] = True
+            return res
         finally:
             conn.close()
 
     def get_records_by_case(self, case_id: str) -> List[Dict[str, Any]]:
         conn = self._get_connection()
         try:
-            cur = conn.execute("SELECT * FROM ledger_records WHERE case_id = ? ORDER BY id ASC", (case_id,))
+            cur = conn.execute("""
+                SELECT lr.*, cr.tx_hash, cr.block_number AS chain_block_number, cr.chain_id, cr.contract_address AS chain_contract_address
+                FROM ledger_records lr
+                LEFT JOIN chain_receipts cr ON lr.evidence_hash = cr.evidence_hash
+                WHERE lr.case_id = ?
+                ORDER BY lr.id ASC
+            """, (case_id,))
             rows = cur.fetchall()
-            return [self._row_to_dict(r) for r in rows]
+            records = []
+            for r in rows:
+                d = self._row_to_dict(r)
+                if d.get("tx_hash"):
+                    d["is_on_chain"] = True
+                records.append(d)
+            return records
         finally:
             conn.close()
 
@@ -866,9 +888,21 @@ class SqliteLedgerStore(LedgerStore):
     def get_all_records(self) -> List[Dict[str, Any]]:
         conn = self._get_connection()
         try:
-            cur = conn.execute("SELECT * FROM ledger_records WHERE id > 0 ORDER BY id DESC")
+            cur = conn.execute("""
+                SELECT lr.*, cr.tx_hash, cr.block_number AS chain_block_number, cr.chain_id, cr.contract_address AS chain_contract_address
+                FROM ledger_records lr
+                LEFT JOIN chain_receipts cr ON lr.evidence_hash = cr.evidence_hash
+                WHERE lr.id > 0
+                ORDER BY lr.id DESC
+            """ )
             rows = cur.fetchall()
-            return [self._row_to_dict(r) for r in rows]
+            records = []
+            for r in rows:
+                d = self._row_to_dict(r)
+                if d.get("tx_hash"):
+                    d["is_on_chain"] = True
+                records.append(d)
+            return records
         finally:
             conn.close()
 

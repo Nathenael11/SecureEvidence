@@ -163,6 +163,7 @@ class SystemHealthResponse(BaseModel):
     block_number: Optional[int] = None
     contract_address: Optional[str] = None
     connected: bool = False
+    explorer_base_url: Optional[str] = None
 
 class StreamControlRequest(BaseModel):
     action: str = Field(..., description="Action to perform: 'start' or 'stop'")

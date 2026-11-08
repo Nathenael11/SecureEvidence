@@ -366,10 +366,21 @@ button.danger,
 
 .badge.verified,
 .badge.ok,
-.badge-benign {
+.badge-benign,
+.pill-live {
   background: var(--se-ok-bg) !important;
   color: var(--se-ok) !important;
   border: 1px solid #B8E4CD !important;
+}
+
+a.pill-live {
+  text-decoration: none !important;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+a.pill-live:hover {
+  text-decoration: underline !important;
+  opacity: 0.85;
 }
 
 .badge.pending,

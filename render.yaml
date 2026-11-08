@@ -11,8 +11,18 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CHAIN_MODE
-        value: "off"
+        value: "sepolia"
+      - key: CHAIN_ID
+        value: "11155111"
+      - key: CONTRACT_ADDRESS
+        value: "0x2cD0b41b4F77d2BA99aD4c656dfC3c12e6712F4B"
+      - key: EXPLORER_BASE_URL
+        value: "https://sepolia.etherscan.io"
       - key: LEDGER_BACKEND
         value: "sqlite"
       - key: FEATURE_COVERAGE_THRESHOLD
         value: "0.60"
+      - key: RPC_URL
+        sync: false
+      - key: SUBMITTER_PRIVATE_KEY
+        sync: false
