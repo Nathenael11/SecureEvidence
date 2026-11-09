@@ -1072,10 +1072,10 @@ def generate_court_certificate_html(record: Dict[str, Any], is_live: bool = Fals
     chain_mode_val = record.get("chain_mode") or settings.CHAIN_MODE
     is_sepolia = (str(chain_id_val) == "11155111" or chain_mode_val == "sepolia")
     explorer_base = (settings.EXPLORER_BASE_URL or "").rstrip("/") if is_sepolia else ""
-    explorer_link = f"{explorer_base}/tx/{tx_hash_val}" if (explorer_base and has_real_tx) else ""
-    if explorer_link:
-        safe_link = html.escape(explorer_link)
-        explorer_display = f'<a href="{safe_link}" target="_blank" style="color:#1F6FB2;word-break:break-all;">{safe_link}</a>'
+    if has_real_tx and is_sepolia:
+        eth_url = html.escape(f"{explorer_base or 'https://sepolia.etherscan.io'}/tx/{tx_hash_val}")
+        bs_url = html.escape(f"https://eth-sepolia.blockscout.com/tx/{tx_hash_val}")
+        explorer_display = f'<a href="{eth_url}" target="_blank" style="color:#1F6FB2;font-weight:600;margin-right:12px;text-decoration:underline;">Etherscan</a> <a href="{bs_url}" target="_blank" style="color:#1F6FB2;font-weight:600;text-decoration:underline;">Blockscout</a>'
     elif str(chain_id_val) == "31337" or chain_mode_val == "local":
         explorer_display = '<span style="color:#64748B;">Local node (Chain ID 31337 &mdash; private test RPC, not on public Etherscan)</span>'
     else:

@@ -667,6 +667,16 @@ tr:hover td,
   border: 1px solid var(--se-border) !important;
 }
 
+.cert-k {
+  color: var(--se-text-muted) !important;
+  font-weight: 500 !important;
+}
+
+.cert-v {
+  color: var(--se-navy) !important;
+  font-weight: 600 !important;
+}
+
 .cert-sig-block .sig-name {
   color: var(--se-navy) !important;
 }

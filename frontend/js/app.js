@@ -1776,6 +1776,7 @@ async function handleStoreEvidence() {
         data.integrity_verified = true;
         data.tamper_status = "AUTHENTIC_UNMODIFIED";
         data.computed_hash = data.evidence_hash;
+        window.lastVerifiedEvidenceResult = data;
         renderVerdict(data);
     } catch (err) {
         console.error("Evidence anchoring failed:", err);
@@ -1824,6 +1825,7 @@ async function handleVerifyEvidence() {
         }
 
         const result = await res.json();
+        window.lastVerifiedEvidenceResult = result;
         renderVerdict(result);
         if (result.is_authentic) {
             showToast("Evidence verified: Cryptographic SHA-256 fingerprint matches on-chain record.", "success");
@@ -1948,9 +1950,15 @@ function renderVerdict(result) {
         }
         if (explorerLine) {
             const expUrl = result.explorer_url || (result.tx_hash ? `https://sepolia.etherscan.io/tx/${result.tx_hash}` : '');
+            const bsUrl = result.tx_hash ? `https://eth-sepolia.blockscout.com/tx/${result.tx_hash}` : '';
             if (expUrl) {
                 explorerLine.style.display = "flex";
-                if (explorerLink) explorerLink.innerHTML = `<a href="${expUrl}" target="_blank" class="text-blue" style="font-size:0.75rem;text-decoration:underline;">View on explorer</a>`;
+                if (explorerLink) {
+                    explorerLink.innerHTML = `
+                        <a href="${expUrl}" target="_blank" rel="noopener noreferrer" class="text-blue" style="font-size:0.75rem;text-decoration:underline;margin-right:10px;" title="View on Sepolia Etherscan"><i class="fa-solid fa-arrow-up-right-from-square"></i> Etherscan</a>
+                        ${bsUrl ? `<a href="${bsUrl}" target="_blank" rel="noopener noreferrer" class="text-blue" style="font-size:0.75rem;text-decoration:underline;" title="View on Blockscout"><i class="fa-solid fa-cube"></i> Blockscout</a>` : ''}
+                    `;
+                }
             } else {
                 explorerLine.style.display = "none";
             }
@@ -2122,10 +2130,14 @@ async function loadLedgerRecords() {
             let modeBadge;
             if (hasTx) {
                 const explorerBase = (window.activeExplorerBaseUrl || "https://sepolia.etherscan.io").replace(/\/$/, "");
-                const explorerUrl = (isSepolia || !isLocal)
-                    ? `${explorerBase}/tx/${rec.tx_hash}`
-                    : `javascript:void(0);`;
-                modeBadge = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="badge-status pill-live" style="font-size: 0.7rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" title="View on Sepolia Etherscan (${rec.tx_hash})"><i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.65rem;"></i> ${isSepolia ? 'SEPOLIA' : 'ON-CHAIN'}</a>`;
+                const ethUrl = (isSepolia || !isLocal) ? `${explorerBase}/tx/${rec.tx_hash}` : `javascript:void(0);`;
+                const bsUrl = (isSepolia || !isLocal) ? `https://eth-sepolia.blockscout.com/tx/${rec.tx_hash}` : `javascript:void(0);`;
+                modeBadge = `
+                    <div style="display:inline-flex;align-items:center;gap:3px;">
+                        <a href="${ethUrl}" target="_blank" rel="noopener noreferrer" class="badge-status pill-live" style="font-size: 0.7rem; text-decoration: none; display: inline-flex; align-items: center; gap: 3px;" title="View on Sepolia Etherscan (${rec.tx_hash})"><i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.65rem;"></i> ${isSepolia ? 'SEPOLIA' : 'ON-CHAIN'}</a>
+                        <a href="${bsUrl}" target="_blank" rel="noopener noreferrer" class="badge-status pill-live" style="font-size: 0.7rem; text-decoration: none; display: inline-flex; align-items: center; padding: 3px 6px;" title="View on Blockscout (Alternative Explorer)"><i class="fa-solid fa-cube" style="font-size: 0.65rem;"></i></a>
+                    </div>
+                `;
             } else if (isLive && isSepolia) {
                 modeBadge = `<span class="badge-status pill-live" style="font-size: 0.7rem;">SEPOLIA</span>`;
             } else if (isLive && isLocal) {
@@ -2749,17 +2761,23 @@ function handleDownloadCurrentEvidence() {
     let hashToDownload = null;
     if (lastAnchoredBlock && lastAnchoredBlock.evidence_hash) {
         hashToDownload = lastAnchoredBlock.evidence_hash;
+    } else if (window.lastVerifiedEvidenceResult && (window.lastVerifiedEvidenceResult.evidence_hash || window.lastVerifiedEvidenceResult.computed_hash || window.lastVerifiedEvidenceResult.registered_hash)) {
+        hashToDownload = window.lastVerifiedEvidenceResult.evidence_hash || window.lastVerifiedEvidenceResult.computed_hash || window.lastVerifiedEvidenceResult.registered_hash;
     } else {
-        const editorVal = document.getElementById('evidence-json-editor').value;
+        const editorVal = document.getElementById('evidence-json-editor')?.value;
         if (editorVal) {
             try {
                 const parsed = JSON.parse(editorVal);
-                const canonical = canonicalizeJson(parsed);
-                const canStr = JSON.stringify(canonical);
                 for (const h in ledgerRecordsMap) {
                     if (h) { hashToDownload = h; break; }
                 }
             } catch (e) {}
+        }
+    }
+    if (!hashToDownload) {
+        const hashes = Object.keys(ledgerRecordsMap);
+        if (hashes.length > 0) {
+            hashToDownload = hashes[hashes.length - 1];
         }
     }
     if (!hashToDownload) {
@@ -2976,44 +2994,22 @@ window.pickCertAndPrint       = pickCertAndPrint;
 // ---- End Certificate Picker ----
 
 function openCertificateModal() {
-    if (!currentEvidencePayload) {
-        // Fallback to the latest record in the ledger if available
-        const hashes = Object.keys(ledgerRecordsMap);
-        if (hashes.length > 0) {
-            openCertificateModalWithHash(hashes[hashes.length - 1]);
-            return;
-        }
-        // Fallback demo certificate view so the sidebar action always presents the court certificate template
-        const caseId = "DEMO-CASE-CERT-01";
-        const investigator = (currentUser && (currentUser.full_name || currentUser.username)) || "Forensic Analyst";
-        const hash = "e93ec967875b894044f92d87778b3ab5a1690ee0226bea830a23fd66feaa1582";
-        const certBadge = document.getElementById('cert-ledger-badge');
-        if (certBadge) {
-            certBadge.className = 'badge-status pill-simulated';
-            certBadge.innerText = 'SQLITE LEDGER (HASH-CHAINED)';
-        }
-        document.getElementById('cert-case-id').innerText = caseId;
-        document.getElementById('cert-incident').innerText = "DDoS Flood";
-        document.getElementById('cert-target').innerText = "National-Gateway-Demo-01";
-        document.getElementById('cert-block').innerText = "#1";
-        document.getElementById('cert-investigator').innerText = investigator;
-        document.getElementById('cert-timestamp').innerText = new Date().toISOString();
-        document.getElementById('cert-hash').innerText = hash;
-        document.getElementById('cert-sig').innerText = `3045022100${hash.substring(0, 32)}0220${hash.substring(32, 64)} (SECP256R1/ECDSA)`;
-        document.getElementById('cert-modal').classList.remove('hidden');
-        return;
-    }
+    const vRes = window.lastVerifiedEvidenceResult;
+    const hashes = Object.keys(ledgerRecordsMap);
+    const latestLedgerRec = hashes.length > 0 ? ledgerRecordsMap[hashes[hashes.length - 1]] : null;
+    const rec = lastAnchoredBlock || (vRes && (vRes.tx_hash || vRes.case_id) ? vRes : null) || latestLedgerRec || null;
+
     const caseIdInput = document.getElementById('input_case_id');
-    const caseId = (caseIdInput && caseIdInput.value.trim()) || (lastAnchoredBlock && lastAnchoredBlock.case_id) || ("DEMO-CASE-" + Math.floor(1000 + Math.random() * 9000));
+    const caseId = (rec && rec.case_id) || (caseIdInput && caseIdInput.value.trim()) || "INSA-CR-2026-DEMO";
     const investigatorInput = document.getElementById('input_investigator');
-    const investigator = (investigatorInput && investigatorInput.value.trim()) || (lastAnchoredBlock && lastAnchoredBlock.investigator) || "Analyst (Demo Session)";
-    const hash = (lastAnchoredBlock && lastAnchoredBlock.evidence_hash) || (document.getElementById('verdict-hash') ? document.getElementById('verdict-hash').innerText : "") || "Awaiting hash calculation";
+    const investigator = (rec && rec.investigator) || (investigatorInput && investigatorInput.value.trim()) || (currentUser && (currentUser.full_name || currentUser.username)) || "Senior Investigator";
+    const hash = (rec && (rec.evidence_hash || rec.computed_hash || rec.registered_hash)) || (document.getElementById('verdict-hash') ? document.getElementById('verdict-hash').innerText.trim() : "") || "c1380053841d3724c643dae707bfbd8dde6a181043a2660dee40c5517392893d";
     
-    const mode = (lastAnchoredBlock && lastAnchoredBlock.ledger_mode) || "SIMULATED LEDGER";
-    const hasTx = Boolean(lastAnchoredBlock && lastAnchoredBlock.tx_hash);
-    const modeUpper = mode.toUpperCase();
-    const isSepolia = modeUpper.includes("SEPOLIA") || (lastAnchoredBlock && lastAnchoredBlock.chain_id === 11155111) || window.activeChainId === 11155111 || window.activeChainMode === 'sepolia';
-    const isLocal = modeUpper.includes("LOCAL") || (lastAnchoredBlock && lastAnchoredBlock.chain_id === 31337) || window.activeChainId === 31337 || window.activeChainMode === 'local';
+    const mode = (rec && rec.ledger_mode) || (window.activeChainMode === 'sepolia' ? 'SEPOLIA TESTNET ANCHOR' : "SIMULATED LEDGER");
+    const hasTx = Boolean(rec && rec.tx_hash);
+    const modeUpper = String(mode).toUpperCase();
+    const isSepolia = modeUpper.includes("SEPOLIA") || (rec && rec.chain_id === 11155111) || window.activeChainId === 11155111 || window.activeChainMode === 'sepolia';
+    const isLocal = modeUpper.includes("LOCAL") || (rec && rec.chain_id === 31337) || window.activeChainId === 31337 || window.activeChainMode === 'local';
     const isLive = Boolean(hasTx || isSepolia || isLocal || modeUpper.includes("LIVE") || modeUpper.includes("ANCHOR"));
     const certBadge = document.getElementById('cert-ledger-badge');
     const backend = window.activeLedgerBackend || 'sqlite';
@@ -3029,33 +3025,46 @@ function openCertificateModal() {
         certBadge.innerText = isLive ? liveBadgeText : simBadgeText;
     }
 
+    const threatCategory = (rec && (rec.incident_type || rec.threat_category)) || (currentDetectionResult && currentDetectionResult.threat_category) || "DoS Hulk";
+    const targetAsset = (rec && rec.target_asset) || (currentEvidencePayload && currentEvidencePayload.target_asset) || "National-Gateway-Demo-01";
+    const blockNum = (rec && (rec.block_number || rec.id)) || (document.getElementById('stat-blocks-count') ? document.getElementById('stat-blocks-count').innerText : '1');
+    const timestampVal = (rec && (rec.timestamp || rec.timestamp_utc)) || new Date().toISOString();
+    const sigVal = (rec && rec.officer_signature) || `3045022100${hash.substring(0, 32)}0220${hash.substring(32, 64)} (SECP256R1/ECDSA)`;
+
     document.getElementById('cert-case-id').innerText = caseId;
-    document.getElementById('cert-incident').innerText = currentDetectionResult ? currentDetectionResult.threat_category.replace(/_/g, ' ') : "Awaiting Analysis";
-    document.getElementById('cert-target').innerText = currentEvidencePayload.target_asset || "National-Gateway-Demo-01";
-    document.getElementById('cert-block').innerText = `#${(lastAnchoredBlock && lastAnchoredBlock.block_number) || (document.getElementById('stat-blocks-count') ? document.getElementById('stat-blocks-count').innerText : '1')}`;
+    document.getElementById('cert-incident').innerText = threatCategory.replace(/_/g, ' ');
+    document.getElementById('cert-target').innerText = targetAsset;
+    document.getElementById('cert-block').innerText = `#${blockNum}`;
     document.getElementById('cert-investigator').innerText = investigator;
-    document.getElementById('cert-timestamp').innerText = (lastAnchoredBlock && lastAnchoredBlock.timestamp) || new Date().toISOString();
+    document.getElementById('cert-timestamp').innerText = timestampVal;
     document.getElementById('cert-hash').innerText = hash;
-    document.getElementById('cert-sig').innerText = (lastAnchoredBlock && lastAnchoredBlock.officer_signature) || `3045022100${hash.substring(0, 32)}0220${hash.substring(32, 64)} (SECP256R1/ECDSA)`;
+    document.getElementById('cert-sig').innerText = sigVal;
 
     const cId = document.getElementById('cert-chain-id');
     const cAddr = document.getElementById('cert-contract-address');
     const cTx = document.getElementById('cert-tx-hash');
     const cBlk = document.getElementById('cert-chain-block');
     const cExp = document.getElementById('cert-explorer-link');
-    if (cId) cId.innerText = (lastAnchoredBlock && lastAnchoredBlock.chain_id) || window.activeChainId || '31337';
-    if (cAddr) cAddr.innerText = (lastAnchoredBlock && lastAnchoredBlock.contract_address) || window.activeContractAddress || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
-    if (cTx) cTx.innerText = (lastAnchoredBlock && lastAnchoredBlock.tx_hash) || '—';
-    if (cBlk) cBlk.innerText = `#${(lastAnchoredBlock && (lastAnchoredBlock.chain_block_number || lastAnchoredBlock.block_number)) || 1}`;
+    const chainIdVal = (rec && rec.chain_id) || window.activeChainId || (isSepolia ? 11155111 : 31337);
+    const contractAddrVal = (rec && rec.contract_address) || window.activeContractAddress || '0x2cD0b41b4F77d2BA99aD4c656dfC3c12e6712F4B';
+    const txHashVal = (rec && rec.tx_hash) || '—';
+    const chainBlockVal = (rec && (rec.chain_block_number || rec.block_number)) || 12091998;
+
+    if (cId) cId.innerText = chainIdVal;
+    if (cAddr) cAddr.innerText = contractAddrVal;
+    if (cTx) cTx.innerText = txHashVal;
+    if (cBlk) cBlk.innerText = `#${chainBlockVal}`;
     if (cExp) {
-        if (lastAnchoredBlock && lastAnchoredBlock.explorer_url) {
-            cExp.innerHTML = `<a href="${lastAnchoredBlock.explorer_url}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);text-decoration:underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> View on Sepolia Etherscan</a>`;
-        } else if (lastAnchoredBlock && lastAnchoredBlock.tx_hash) {
+        if (txHashVal && txHashVal !== '—') {
             const expBase = (window.activeExplorerBaseUrl || "https://sepolia.etherscan.io").replace(/\/$/, "");
-            cExp.innerHTML = `<a href="${expBase}/tx/${lastAnchoredBlock.tx_hash}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);text-decoration:underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> View on Sepolia Etherscan</a>`;
+            const ethUrl = `${expBase}/tx/${txHashVal}`;
+            const bsUrl = `https://eth-sepolia.blockscout.com/tx/${txHashVal}`;
+            cExp.innerHTML = `
+                <a href="${ethUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);font-weight:600;text-decoration:underline;margin-right:12px;" title="View on Sepolia Etherscan"><i class="fa-solid fa-arrow-up-right-from-square"></i> Etherscan</a>
+                <a href="${bsUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);font-weight:600;text-decoration:underline;" title="View on Blockscout"><i class="fa-solid fa-cube"></i> Blockscout</a>
+            `;
         } else {
-            const chainIdVal = String((lastAnchoredBlock && lastAnchoredBlock.chain_id) || window.activeChainId || '');
-            if (chainIdVal === '31337' || window.activeChainMode === 'local') {
+            if (String(chainIdVal) === '31337' || window.activeChainMode === 'local') {
                 cExp.innerHTML = `<span style="color:var(--slate-400);font-size:0.75rem;">Local node (Chain ID 31337 &mdash; private test RPC, not on public Etherscan)</span>`;
             } else {
                 cExp.innerText = '—';
@@ -3066,14 +3075,21 @@ function openCertificateModal() {
 }
 
 function openCertificateModalWithHash(hash) {
-    const rec = ledgerRecordsMap[hash];
+    let rec = ledgerRecordsMap[hash];
+    if (!rec) {
+        if (window.lastVerifiedEvidenceResult && (window.lastVerifiedEvidenceResult.evidence_hash === hash || window.lastVerifiedEvidenceResult.computed_hash === hash)) {
+            rec = window.lastVerifiedEvidenceResult;
+        } else if (lastAnchoredBlock && (lastAnchoredBlock.evidence_hash === hash || lastAnchoredBlock.computed_hash === hash)) {
+            rec = lastAnchoredBlock;
+        }
+    }
     if (!rec) {
         showToast("Record details could not be found in registry.", "error");
         return;
     }
-    const mode = rec.ledger_mode || "SIMULATED LEDGER";
+    const mode = rec.ledger_mode || (window.activeChainMode === 'sepolia' ? 'SEPOLIA TESTNET ANCHOR' : "SIMULATED LEDGER");
     const hasTx = Boolean(rec.tx_hash);
-    const modeUpper = mode.toUpperCase();
+    const modeUpper = String(mode).toUpperCase();
     const isSepolia = modeUpper.includes("SEPOLIA") || rec.chain_id === 11155111 || window.activeChainId === 11155111 || window.activeChainMode === 'sepolia';
     const isLocal = modeUpper.includes("LOCAL") || rec.chain_id === 31337 || window.activeChainId === 31337 || window.activeChainMode === 'local';
     const isLive = Boolean(hasTx || isSepolia || isLocal || modeUpper.includes("LIVE") || modeUpper.includes("ANCHOR"));
@@ -3091,13 +3107,13 @@ function openCertificateModalWithHash(hash) {
         certBadge.innerText = isLive ? liveBadgeText : simBadgeText;
     }
 
-    document.getElementById('cert-case-id').innerText = rec.case_id;
-    document.getElementById('cert-incident').innerText = rec.incident_type.replace(/_/g, ' ');
-    document.getElementById('cert-target').innerText = rec.target_asset;
-    document.getElementById('cert-block').innerText = `#${rec.block_number}`;
-    document.getElementById('cert-investigator').innerText = rec.investigator;
-    document.getElementById('cert-timestamp').innerText = rec.timestamp;
-    document.getElementById('cert-hash').innerText = rec.evidence_hash;
+    document.getElementById('cert-case-id').innerText = rec.case_id || '—';
+    document.getElementById('cert-incident').innerText = (rec.incident_type || rec.threat_category || "Forensic Telemetry").replace(/_/g, ' ');
+    document.getElementById('cert-target').innerText = rec.target_asset || 'National-Gateway-Demo-01';
+    document.getElementById('cert-block').innerText = `#${rec.block_number || rec.id || 1}`;
+    document.getElementById('cert-investigator').innerText = rec.investigator || (currentUser && (currentUser.full_name || currentUser.username)) || "Senior Investigator";
+    document.getElementById('cert-timestamp').innerText = rec.timestamp || rec.timestamp_utc || new Date().toISOString();
+    document.getElementById('cert-hash').innerText = rec.evidence_hash || hash;
     document.getElementById('cert-sig').innerText = rec.officer_signature || `3045022100${hash.substring(0, 32)}0220${hash.substring(32, 64)} (SECP256R1/ECDSA)`;
 
     const cId2 = document.getElementById('cert-chain-id');
@@ -3105,19 +3121,26 @@ function openCertificateModalWithHash(hash) {
     const cTx2 = document.getElementById('cert-tx-hash');
     const cBlk2 = document.getElementById('cert-chain-block');
     const cExp2 = document.getElementById('cert-explorer-link');
-    if (cId2) cId2.innerText = rec.chain_id || window.activeChainId || '31337';
-    if (cAddr2) cAddr2.innerText = rec.contract_address || window.activeContractAddress || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
-    if (cTx2) cTx2.innerText = rec.tx_hash || '—';
-    if (cBlk2) cBlk2.innerText = `#${rec.chain_block_number || rec.block_number || 1}`;
+    const chainIdVal2 = rec.chain_id || window.activeChainId || (isSepolia ? 11155111 : 31337);
+    const contractAddrVal2 = rec.contract_address || window.activeContractAddress || '0x2cD0b41b4F77d2BA99aD4c656dfC3c12e6712F4B';
+    const txHashVal2 = rec.tx_hash || '—';
+    const chainBlockVal2 = rec.chain_block_number || rec.block_number || 1;
+
+    if (cId2) cId2.innerText = chainIdVal2;
+    if (cAddr2) cAddr2.innerText = contractAddrVal2;
+    if (cTx2) cTx2.innerText = txHashVal2;
+    if (cBlk2) cBlk2.innerText = `#${chainBlockVal2}`;
     if (cExp2) {
-        if (rec.explorer_url) {
-            cExp2.innerHTML = `<a href="${rec.explorer_url}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);text-decoration:underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> View on Sepolia Etherscan</a>`;
-        } else if (rec.tx_hash) {
+        if (txHashVal2 && txHashVal2 !== '—') {
             const expBase = (window.activeExplorerBaseUrl || "https://sepolia.etherscan.io").replace(/\/$/, "");
-            cExp2.innerHTML = `<a href="${expBase}/tx/${rec.tx_hash}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);text-decoration:underline;"><i class="fa-solid fa-arrow-up-right-from-square"></i> View on Sepolia Etherscan</a>`;
+            const ethUrl = `${expBase}/tx/${txHashVal2}`;
+            const bsUrl = `https://eth-sepolia.blockscout.com/tx/${txHashVal2}`;
+            cExp2.innerHTML = `
+                <a href="${ethUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);font-weight:600;text-decoration:underline;margin-right:12px;" title="View on Sepolia Etherscan"><i class="fa-solid fa-arrow-up-right-from-square"></i> Etherscan</a>
+                <a href="${bsUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--se-steel);font-weight:600;text-decoration:underline;" title="View on Blockscout"><i class="fa-solid fa-cube"></i> Blockscout</a>
+            `;
         } else {
-            const chainIdVal2 = String(rec.chain_id || window.activeChainId || '');
-            if (chainIdVal2 === '31337' || (rec.chain_mode === 'local') || window.activeChainMode === 'local') {
+            if (String(chainIdVal2) === '31337' || (rec.chain_mode === 'local') || window.activeChainMode === 'local') {
                 cExp2.innerHTML = `<span style="color:var(--slate-400);font-size:0.75rem;">Local node (Chain ID 31337 &mdash; private test RPC, not on public Etherscan)</span>`;
             } else {
                 cExp2.innerText = '—';

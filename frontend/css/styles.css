@@ -1091,7 +1091,7 @@ body {
 }
 
 .cert-k { color: var(--text-secondary); }
-.cert-v { font-weight: 600; color: #fff; }
+.cert-v { font-weight: 600; color: var(--se-navy, #0B2A4A); }
 
 .cert-hash-container {
     margin-top: 8px;
