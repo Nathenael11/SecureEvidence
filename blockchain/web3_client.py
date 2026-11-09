@@ -147,6 +147,31 @@ class Web3EvidenceClient:
     def is_live_chain(self) -> bool:
         return self.is_connected and self.chain_mode in ("local", "sepolia")
 
+    def _build_fee_params(self, w3=None) -> Dict[str, Any]:
+        """Build transaction fee parameters, preferring EIP-1559 Type 2 fees with baseFee buffer."""
+        target_w3 = w3 or getattr(self, "web3", None)
+        if not target_w3:
+            return {"gasPrice": 20000000000}
+        base_fee = None
+        try:
+            latest_block = target_w3.eth.get_block('latest')
+            base_fee = latest_block.get('baseFeePerGas')
+        except Exception:
+            base_fee = None
+        if base_fee is not None:
+            try:
+                priority_fee = target_w3.eth.max_priority_fee
+            except Exception:
+                priority_fee = target_w3.to_wei(2, 'gwei')
+            max_fee = int(base_fee * 1.3) + priority_fee
+            return {
+                "maxFeePerGas": max_fee,
+                "maxPriorityFeePerGas": priority_fee,
+                "type": 2
+            }
+        gas_price = int(target_w3.eth.gas_price * 1.25) if self.chain_mode == "sepolia" else target_w3.eth.gas_price
+        return {"gasPrice": gas_price}
+
     def _sync_from_store(self):
         """Synchronize in-memory cache from the persistent LedgerStore."""
         self.evidence_registry.clear()
@@ -226,6 +251,17 @@ class Web3EvidenceClient:
                 "ledger_mode": rec["ledger_mode"],
                 "block_hash": rec["block_hash"]
             })
+
+        # Load persistent Merkle Batches from store across workers/restarts
+        if hasattr(self.store, "get_all_merkle_batches"):
+            for b in self.store.get_all_merkle_batches():
+                r_hash = b.get("root_hash", "").lower()
+                if r_hash and r_hash not in self.merkle_batches and b.get("leaf_hashes"):
+                    self.merkle_batches[r_hash] = {
+                        "metadata": b,
+                        "tree": MerkleTree(b["leaf_hashes"]),
+                        "events": []
+                    }
 
     def _init_contract(self):
         """Load contract ABI and initialize Contract instance."""
@@ -358,16 +394,40 @@ class Web3EvidenceClient:
             raise RpcDownError(f"Failed to communicate with RPC at {self.rpc_url}: {str(e)}")
 
     def _send_signed_tx(self, func_call, gas_bound: int = 1500000) -> Dict[str, Any]:
-        """Send a signed transaction to the contract with nonce handling, gas bounds, confirmations, and backoff retries."""
+        """Send a signed transaction to the contract with EIP-1559 fees, nonce handling, gas bounds, and safe retries."""
         if not self.web3 or not self.account:
             raise BlockchainError("Web3 connection or submitter key not configured.")
 
         w3 = self.web3
         last_exc = None
+        broadcast_tx_hash = None
+
         for attempt in range(3):
             try:
+                # If transaction was already broadcast in a prior attempt, check if already mined or pending
+                if broadcast_tx_hash is not None:
+                    try:
+                        receipt = w3.eth.get_transaction_receipt(broadcast_tx_hash)
+                        if receipt and receipt.get("blockNumber"):
+                            b_num = receipt.get("blockNumber")
+                            b_hash_bytes = receipt.get("blockHash")
+                            b_hash_hex = b_hash_bytes.hex() if hasattr(b_hash_bytes, "hex") else str(b_hash_bytes)
+                            tx_hex = broadcast_tx_hash.hex() if hasattr(broadcast_tx_hash, "hex") else str(broadcast_tx_hash)
+                            if not tx_hex.startswith("0x"):
+                                tx_hex = f"0x{tx_hex}"
+                            if not b_hash_hex.startswith("0x"):
+                                b_hash_hex = f"0x{b_hash_hex}"
+                            return {
+                                "tx_hash": tx_hex,
+                                "block_number": b_num,
+                                "block_hash": b_hash_hex,
+                                "chain_id": w3.eth.chain_id,
+                                "contract_address": self.contract_address
+                            }
+                    except Exception:
+                        pass
+
                 nonce = w3.eth.get_transaction_count(self.account.address, 'pending')
-                gas_price = int(w3.eth.gas_price * 1.25) if self.chain_mode == "sepolia" else w3.eth.gas_price
 
                 # Dynamically estimate required gas with safety buffer
                 try:
@@ -377,23 +437,52 @@ class Web3EvidenceClient:
                     tx_gas = gas_bound
 
                 balance = w3.eth.get_balance(self.account.address)
-                required_wei = gas_price * tx_gas
-                if balance < required_wei:
-                    raise InsufficientFundsError(
-                        f"Submitter account {self.account.address} has {balance} wei; requires {required_wei} wei for gas"
-                    )
 
-                tx = func_call.build_transaction({
+                # Check EIP-1559 fee support (standard on Sepolia and modern EVMs)
+                base_fee = None
+                try:
+                    latest_block = w3.eth.get_block('latest')
+                    base_fee = latest_block.get('baseFeePerGas')
+                except Exception:
+                    base_fee = None
+
+                tx_params = {
                     'from': self.account.address,
                     'nonce': nonce,
                     'gas': tx_gas,
-                    'gasPrice': gas_price,
                     'chainId': w3.eth.chain_id
-                })
+                }
 
+                if base_fee is not None:
+                    # EIP-1559 Type 2 transaction
+                    try:
+                        priority_fee = w3.eth.max_priority_fee
+                    except Exception:
+                        priority_fee = w3.to_wei(2, 'gwei')
+                    max_fee = int(base_fee * 1.3) + priority_fee
+                    required_wei = max_fee * tx_gas
+                    if balance < required_wei:
+                        raise InsufficientFundsError(
+                            f"Submitter account {self.account.address} has {balance} wei; requires {required_wei} wei for gas (EIP-1559)"
+                        )
+                    tx_params['maxFeePerGas'] = max_fee
+                    tx_params['maxPriorityFeePerGas'] = priority_fee
+                    tx_params['type'] = 2
+                else:
+                    # Legacy gasPrice transaction fallback
+                    gas_price = int(w3.eth.gas_price * 1.25) if self.chain_mode == "sepolia" else w3.eth.gas_price
+                    required_wei = gas_price * tx_gas
+                    if balance < required_wei:
+                        raise InsufficientFundsError(
+                            f"Submitter account {self.account.address} has {balance} wei; requires {required_wei} wei for gas"
+                        )
+                    tx_params['gasPrice'] = gas_price
+
+                tx = func_call.build_transaction(tx_params)
                 signed = w3.eth.account.sign_transaction(tx, self.submitter_private_key)
                 raw_tx_bytes = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction")
                 tx_hash = w3.eth.send_raw_transaction(raw_tx_bytes)
+                broadcast_tx_hash = tx_hash
 
                 wait_timeout = 120 if self.chain_mode == "sepolia" else 60
                 receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=wait_timeout)
@@ -407,8 +496,9 @@ class Web3EvidenceClient:
                 # Wait for additional confirmations if required (e.g. Sepolia)
                 if self.confirmations > 1:
                     target_block = block_number + self.confirmations - 1
-                    while w3.eth.block_number < target_block:
-                        time.sleep(2)
+                    conf_start = time.time()
+                    while w3.eth.block_number < target_block and (time.time() - conf_start < 30):
+                        time.sleep(1)
 
                 tx_hex = tx_hash.hex() if hasattr(tx_hash, "hex") else str(tx_hash)
                 if not tx_hex.startswith("0x"):
@@ -426,6 +516,26 @@ class Web3EvidenceClient:
                 raise
             except Exception as e:
                 last_exc = e
+                # Check if transaction was already submitted / mined despite error (e.g. already known or timeout)
+                err_text = str(e).lower()
+                if "already known" in err_text or "nonce too low" in err_text:
+                    if broadcast_tx_hash is not None:
+                        try:
+                            rc = w3.eth.wait_for_transaction_receipt(broadcast_tx_hash, timeout=30)
+                            if rc and rc.get("status") == 1:
+                                b_num = rc.get("blockNumber")
+                                b_hash_b = rc.get("blockHash")
+                                b_hash_h = b_hash_b.hex() if hasattr(b_hash_b, "hex") else str(b_hash_b)
+                                tx_h = broadcast_tx_hash.hex() if hasattr(broadcast_tx_hash, "hex") else str(broadcast_tx_hash)
+                                return {
+                                    "tx_hash": tx_h if tx_h.startswith("0x") else f"0x{tx_h}",
+                                    "block_number": b_num,
+                                    "block_hash": b_hash_h if b_hash_h.startswith("0x") else f"0x{b_hash_h}",
+                                    "chain_id": w3.eth.chain_id,
+                                    "contract_address": self.contract_address
+                                }
+                        except Exception:
+                            pass
                 time.sleep(1 * (2 ** attempt))
 
         raise BlockchainError(f"Transaction failed after 3 attempts: {str(last_exc)}")
@@ -1082,8 +1192,17 @@ class Web3EvidenceClient:
         }
 
     def get_merkle_proof(self, root_hash: str, item_index: int) -> Dict[str, Any]:
-        """Generate Merkle inclusion proof for a specific event within a batch."""
+        """Generate Merkle inclusion proof for a specific event within a batch (checks cache & store)."""
         clean_root = root_hash.lower()
+        if clean_root not in self.merkle_batches:
+            if hasattr(self.store, "get_merkle_batch_by_root"):
+                db_batch = self.store.get_merkle_batch_by_root(clean_root)
+                if db_batch and db_batch.get("leaf_hashes"):
+                    self.merkle_batches[clean_root] = {
+                        "metadata": db_batch,
+                        "tree": MerkleTree(db_batch["leaf_hashes"]),
+                        "events": []
+                    }
         if clean_root not in self.merkle_batches:
             raise KeyError(f"Merkle root {root_hash} not found")
 
@@ -1166,7 +1285,7 @@ class Web3EvidenceClient:
             "total_blocks": stats["total_blocks"],
             "total_evidence_stored": stats["total_evidence_stored"],
             "total_cases_tracked": stats["total_cases_tracked"],
-            "total_merkle_batches": len(self.merkle_batches),
+            "total_merkle_batches": max(len(self.merkle_batches), self.store.get_merkle_batches_count()) if hasattr(self.store, "get_merkle_batches_count") else len(self.merkle_batches),
             "latest_block_hash": stats["latest_block_hash"],
             "chain_head_hash": stats["latest_block_hash"],
             "ledger_mode": self.ledger_mode,

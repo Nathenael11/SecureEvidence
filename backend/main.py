@@ -58,11 +58,20 @@ from backend.user_store import (
     mark_refresh_token_used,
     revoke_token_family,
     inc_verification_stat,
-    get_verification_stats
+    get_verification_stats,
+    get_system_flag,
+    set_system_flag,
+    save_stream_state,
+    load_stream_state,
+    record_stream_alert,
+    get_stream_alerts,
+    record_stream_window,
+    get_stream_windows
 )
 from backend.security import (
     SecurityHeadersMiddleware,
     AuditLogger,
+    get_client_ip,
     create_jwt_token,
     create_refresh_token,
     decode_jwt_token,
@@ -98,6 +107,40 @@ init_user_db()
 
 LEDGER_INTEGRITY_STATUS = {"status": "VALID", "broken_id": None}
 LEDGER_INTEGRITY_ACKNOWLEDGED = False
+
+def is_ledger_integrity_acknowledged() -> bool:
+    global LEDGER_INTEGRITY_ACKNOWLEDGED
+    try:
+        val = get_system_flag("ledger_integrity_acknowledged", "0")
+        if str(val).lower() in ("1", "true", "yes"):
+            return True
+    except Exception:
+        pass
+    return bool(LEDGER_INTEGRITY_ACKNOWLEDGED)
+
+def set_ledger_integrity_acknowledged(val: bool) -> None:
+    global LEDGER_INTEGRITY_ACKNOWLEDGED
+    LEDGER_INTEGRITY_ACKNOWLEDGED = bool(val)
+    try:
+        set_system_flag("ledger_integrity_acknowledged", "1" if val else "0")
+    except Exception:
+        pass
+
+# Cached chain verification with TTL to prevent DoS on /health
+_CHAIN_VERIFY_CACHE: Dict[str, Any] = {"timestamp": 0.0, "result": None}
+
+async def get_cached_chain_verification(evidence_client, max_age_sec: float = 30.0) -> Dict[str, Any]:
+    now = time.time()
+    if _CHAIN_VERIFY_CACHE["result"] is not None and (now - _CHAIN_VERIFY_CACHE["timestamp"]) < max_age_sec:
+        return _CHAIN_VERIFY_CACHE["result"]
+    res = await asyncio.to_thread(evidence_client.verify_chain)
+    _CHAIN_VERIFY_CACHE["timestamp"] = now
+    _CHAIN_VERIFY_CACHE["result"] = res
+    return res
+
+def invalidate_chain_verification_cache() -> None:
+    _CHAIN_VERIFY_CACHE["timestamp"] = 0.0
+    _CHAIN_VERIFY_CACHE["result"] = None
 
 def check_startup_ledger_integrity():
     global LEDGER_INTEGRITY_STATUS
@@ -175,7 +218,7 @@ async def health_check():
     evidence_client = EvidenceService.get_instance()
     detector = DetectionService.get_instance()
     
-    v_res = evidence_client.verify_chain()
+    v_res = await get_cached_chain_verification(evidence_client)
     integrity_status = "VALID" if v_res.get("ok") else ("TRUNCATED" if v_res.get("status") == "TRUNCATED" else "BROKEN")
     broken_id = v_res.get("broken_id") if not v_res.get("ok") else None
     head_hash = v_res.get("head_hash")
@@ -221,8 +264,7 @@ async def acknowledge_broken_chain(
     current_user: Dict[str, Any] = Depends(require_role({ROLE_SYSTEM_ADMIN}))
 ):
     """Acknowledge compromised chain state to permit operations (Restricted strictly to system_admin)."""
-    global LEDGER_INTEGRITY_ACKNOWLEDGED
-    LEDGER_INTEGRITY_ACKNOWLEDGED = True
+    set_ledger_integrity_acknowledged(True)
     evidence_client = EvidenceService.get_instance()
     evidence_client.is_chain_disagreement_blocked = False
     return {"status": "ACKNOWLEDGED", "message": "Broken ledger state acknowledged by administrator."}
@@ -234,7 +276,8 @@ async def anchor_ledger_head(
     """Anchor current ledger head onto the blockchain (Restricted to system_admin, investigator)."""
     evidence_client = EvidenceService.get_instance()
     try:
-        receipt = evidence_client.anchor_ledger_head()
+        receipt = await asyncio.to_thread(evidence_client.anchor_ledger_head)
+        invalidate_chain_verification_cache()
         return receipt
     except (RpcDownError, WrongChainIdError, InsufficientFundsError, BlockchainError) as e:
         raise HTTPException(
@@ -242,18 +285,67 @@ async def anchor_ledger_head(
             detail=f"Ledger head anchoring failed: {str(e)}"
         )
     except Exception as e:
+        logger.exception(f"Unexpected error anchoring ledger head: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ledger head anchoring failed: {str(e)}"
+            detail="An internal error occurred while anchoring ledger head."
         )
 
-# Server-side detection results cache (bounded in-memory store keyed by incident_id)
+# Server-side detection results cache and persistent store
 SERVER_DETECTION_STORE: Dict[str, Dict[str, Any]] = {}
+
+def save_detection_entry(incident_id: str, entry: Dict[str, Any]) -> None:
+    SERVER_DETECTION_STORE[incident_id] = entry
+    if len(SERVER_DETECTION_STORE) > 500:
+        oldest_key = next(iter(SERVER_DETECTION_STORE))
+        del SERVER_DETECTION_STORE[oldest_key]
+    try:
+        evidence_client = EvidenceService.get_instance()
+        if hasattr(evidence_client.store, "save_detection_incident"):
+            pred = entry.get("prediction", {})
+            filt = entry.get("filtered_event", {})
+            evidence_client.store.save_detection_incident({
+                "incident_id": incident_id,
+                "created_at": entry.get("created_at") or datetime.now(timezone.utc).isoformat(),
+                "target_asset": filt.get("target_asset", ""),
+                "source_ip": filt.get("source_ip", ""),
+                "destination_ip": filt.get("destination_ip", ""),
+                "threat_category": pred.get("threat_category", "UNKNOWN"),
+                "confidence": float(pred.get("confidence", 0.0)),
+                "is_threat": bool(pred.get("is_threat", False)),
+                "has_disagreement": bool(pred.get("has_disagreement", False)),
+                "prediction": pred,
+                "filtered_event": filt,
+                "review": entry.get("review"),
+                "reviewed_by_analyst": bool(entry.get("review") or pred.get("reviewed_by_analyst", False))
+            })
+    except Exception as e:
+        logger.warning(f"Failed to persist detection entry {incident_id}: {e}")
+
+def get_detection_entry(incident_id: str) -> Optional[Dict[str, Any]]:
+    if incident_id in SERVER_DETECTION_STORE:
+        return SERVER_DETECTION_STORE[incident_id]
+    try:
+        evidence_client = EvidenceService.get_instance()
+        if hasattr(evidence_client.store, "get_detection_incident"):
+            db_inc = evidence_client.store.get_detection_incident(incident_id)
+            if db_inc:
+                entry = {
+                    "prediction": db_inc.get("prediction", {}),
+                    "filtered_event": db_inc.get("filtered_event", {}),
+                    "review": db_inc.get("review"),
+                    "created_at": db_inc.get("created_at")
+                }
+                SERVER_DETECTION_STORE[incident_id] = entry
+                return entry
+    except Exception as e:
+        logger.warning(f"Failed to load detection entry {incident_id}: {e}")
+    return None
 
 @app.post("/evidence/verify-public", tags=["Public Verification"])
 async def verify_evidence_public(req_data: PublicVerifyRequest, request: Request):
     """Public, unauthenticated evidence integrity verification endpoint with rate limiting."""
-    client_ip = request.client.host if request.client else "127.0.0.1"
+    client_ip = get_client_ip(request)
     if not public_verifier_limiter.check_rate_limit(client_ip):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -279,7 +371,7 @@ async def verify_evidence_public(req_data: PublicVerifyRequest, request: Request
 
     try:
         evidence_client = EvidenceService.get_instance()
-        result = evidence_client.verify_by_hash(target_hash)
+        result = await asyncio.to_thread(evidence_client.verify_by_hash, target_hash)
 
         inc_verification_stat("total_queries")
         if result.get("is_authentic", False):
@@ -300,34 +392,13 @@ async def verify_evidence_public(req_data: PublicVerifyRequest, request: Request
         is_superseded = rec.get("superseded", False)
         superseded_by = rec.get("superseded_by")
 
-        # Perform genuine case ID lookup in ledger database for unverified raw text
-        matched_case = False
-        if req_data.raw_text and not is_authentic:
-            extracted_case_id = None
-            try:
-                parsed_json = json.loads(req_data.raw_text)
-                if isinstance(parsed_json, dict):
-                    extracted_case_id = parsed_json.get("case_id") or parsed_json.get("incident_id")
-            except Exception:
-                m = re.search(r'["\']?(?:case_id|incident_id)["\']?\s*[:=]\s*["\']?([A-Za-z0-9_-]+)', req_data.raw_text)
-                if m:
-                    extracted_case_id = m.group(1)
-
-            if extracted_case_id:
-                case_records = evidence_client.store.get_records_by_case(extracted_case_id)
-                if case_records:
-                    matched_case = True
-
-        # Determine exact status among the 4 required states:
+        # Determine exact status without leaking internal case existence
         if is_superseded:
             status_verdict = "SUPERSEDED"
             msg = f"Record superseded by replacement ID: {superseded_by or 'N/A'}"
         elif is_authentic:
             status_verdict = "INTEGRITY VERIFIED"
             msg = "Cryptographic fingerprint matches the anchored ledger record."
-        elif matched_case:
-            status_verdict = "HASH MISMATCH"
-            msg = "Record found by ID but calculated evidence hash does not match anchored ledger digest."
         else:
             status_verdict = "NOT FOUND"
             msg = "Evidence hash not found in sovereign ledger registry."
@@ -350,7 +421,11 @@ async def verify_evidence_public(req_data: PublicVerifyRequest, request: Request
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Public verification error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while verifying evidence."
+        )
 
 # ==================== AUTHENTICATION ROUTES ====================
 
@@ -358,14 +433,14 @@ async def verify_evidence_public(req_data: PublicVerifyRequest, request: Request
 @app.post("/auth/token", response_model=LoginResponse, tags=["Authentication"])
 async def login(req_data: TokenRequest, request: Request, response: Response):
     """Authenticate against persistent user store with brute-force lockout and set httpOnly refresh cookie."""
-    client_ip = request.client.host if request.client else "127.0.0.1"
+    client_ip = get_client_ip(request)
     if not login_limiter.check_rate_limit(client_ip):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Rate limit exceeded for authentication requests."
         )
 
-    success, user, message = authenticate_user(req_data.username, req_data.password)
+    success, user, message = authenticate_user(req_data.username, req_data.password, client_ip=client_ip)
     if not success or not user:
         AuditLogger.log_api_call(
             endpoint="/auth/login",
@@ -458,7 +533,7 @@ async def refresh_tokens(request: Request, response: Response):
             AuditLogger.log_api_call(
                 endpoint="/auth/refresh",
                 method="POST",
-                client_ip=request.client.host if request.client else "127.0.0.1",
+                client_ip=get_client_ip(request),
                 status_code=401,
                 officer_id=username or "unknown",
                 details=f"Security alert: Refresh token reuse detected for family {family_id}. Revoked."
@@ -532,7 +607,7 @@ async def logout(request: Request, response: Response):
     AuditLogger.log_api_call(
         endpoint="/auth/logout",
         method="POST",
-        client_ip=request.client.host if request.client else "127.0.0.1",
+        client_ip=get_client_ip(request),
         status_code=200,
         officer_id=username,
         details="User logged out and tokens revoked."
@@ -567,46 +642,24 @@ async def detect_threat(
         }
 
         detector = DetectionService.get_instance()
-        prediction = detector.predict(filtered_event)
+        prediction = await asyncio.to_thread(detector.predict, filtered_event)
         incident_id = f"INSA-CR-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:6].upper()}"
         prediction["incident_id"] = incident_id
 
         # Persist detection result on the server by incident_id (both cache and persistent SQLite store)
-        SERVER_DETECTION_STORE[incident_id] = {
+        save_detection_entry(incident_id, {
             "prediction": dict(prediction),
             "filtered_event": filtered_event,
             "review": None,
             "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        if len(SERVER_DETECTION_STORE) > 500:
-            oldest_key = next(iter(SERVER_DETECTION_STORE))
-            del SERVER_DETECTION_STORE[oldest_key]
+        })
 
-        evidence_client = EvidenceService.get_instance()
-        if hasattr(evidence_client.store, "save_detection_incident"):
-            try:
-                evidence_client.store.save_detection_incident({
-                    "incident_id": incident_id,
-                    "target_asset": event.target_asset or filtered_event.get("target_asset", ""),
-                    "source_ip": event.source_ip or filtered_event.get("source_ip", ""),
-                    "destination_ip": event.destination_ip or filtered_event.get("destination_ip", ""),
-                    "threat_category": prediction.get("threat_category", "UNKNOWN"),
-                    "confidence": float(prediction.get("confidence", 0.0)),
-                    "is_threat": prediction.get("is_threat", False),
-                    "has_disagreement": prediction.get("has_disagreement", False),
-                    "prediction": dict(prediction),
-                    "filtered_event": filtered_event,
-                    "review": None,
-                    "reviewed_by_analyst": False
-                })
-            except Exception as e:
-                logger.warning(f"Failed to persist detection incident {incident_id}: {e}")
-
+        client_ip = get_client_ip(request)
         if prediction.get("status") == "INSUFFICIENT_DATA":
             AuditLogger.log_api_call(
                 endpoint="/detect",
                 method="POST",
-                client_ip=request.client.host if request.client else "127.0.0.1",
+                client_ip=client_ip,
                 status_code=422,
                 officer_id=current_user.get("sub", "analyst"),
                 details=f"Inference refused: insufficient feature coverage ({prediction.get('feature_coverage_pct')}%)"
@@ -616,17 +669,20 @@ async def detect_threat(
         AuditLogger.log_api_call(
             endpoint="/detect",
             method="POST",
-            client_ip=request.client.host if request.client else "127.0.0.1",
+            client_ip=client_ip,
             status_code=200,
             officer_id=current_user.get("sub", "analyst"),
             details=f"Classification: {prediction['threat_category']} (Conf: {prediction['confidence']})"
         )
 
         return JSONResponse(status_code=status.HTTP_200_OK, content=prediction)
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.exception(f"Inference error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Inference error: {str(e)}"
+            detail="An error occurred during threat detection inference."
         )
 
 @app.post("/ingest/suricata", tags=["Sensor Log Ingestion"])
@@ -647,8 +703,11 @@ async def ingest_suricata_log(
             "normalized_telemetry": normalized,
             "ai_classification": prediction
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Suricata parsing error: {str(e)}")
+        logger.exception(f"Suricata parsing error: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred while parsing Suricata EVE log event.")
 
 @app.post("/evidence/review", tags=["Forensic Review"])
 async def review_evidence(
@@ -662,8 +721,8 @@ async def review_evidence(
     evidence_client = EvidenceService.get_instance()
 
     # Flow 1: Pre-anchoring disagreement review keyed by incident_id
-    if req_data.incident_id and req_data.incident_id in SERVER_DETECTION_STORE:
-        det_entry = SERVER_DETECTION_STORE[req_data.incident_id]
+    det_entry = get_detection_entry(req_data.incident_id) if req_data.incident_id else None
+    if req_data.incident_id and det_entry:
         pred = det_entry["prediction"]
         justification = (req_data.justification or req_data.notes or "").strip()
         if not justification:
@@ -700,7 +759,7 @@ async def review_evidence(
         AuditLogger.log_api_call(
             endpoint="/evidence/review",
             method="POST",
-            client_ip=request.client.host if request.client else "127.0.0.1",
+            client_ip=get_client_ip(request),
             status_code=200,
             officer_id=officer_id,
             details=f"Analyst review recorded for incident {req_data.incident_id} ({justification[:80]})"
@@ -735,7 +794,7 @@ async def review_evidence(
         AuditLogger.log_api_call(
             endpoint="/evidence/review",
             method="POST",
-            client_ip=request.client.host if request.client else "127.0.0.1",
+            client_ip=get_client_ip(request),
             status_code=200,
             officer_id=officer_id,
             details=f"Analyst review confirmed for evidence hash {req_data.evidence_hash[:16]}..."
@@ -770,15 +829,15 @@ async def store_evidence(
 
     # Refuse anchoring if chain disagreement is unresolved
     evidence_client = EvidenceService.get_instance()
-    if evidence_client.is_chain_disagreement_blocked and not LEDGER_INTEGRITY_ACKNOWLEDGED:
+    if evidence_client.is_chain_disagreement_blocked and not is_ledger_integrity_acknowledged():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Anchoring blocked: Unresolved LOCAL/CHAIN DISAGREEMENT detected. System administrator review and acknowledgment required."
         )
 
     # Refuse anchoring if ledger integrity is broken or truncated and unacknowledged
-    chain_verif = evidence_client.verify_chain()
-    if not chain_verif.get("ok") and not LEDGER_INTEGRITY_ACKNOWLEDGED:
+    chain_verif = await get_cached_chain_verification(evidence_client)
+    if not chain_verif.get("ok") and not is_ledger_integrity_acknowledged():
         broken_detail = chain_verif.get("message") or f"BROKEN at block {chain_verif.get('broken_id')}"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -792,16 +851,7 @@ async def store_evidence(
     evidence_client = EvidenceService.get_instance()
     server_det = None
     if incident_id:
-        server_det = SERVER_DETECTION_STORE.get(incident_id)
-        if not server_det and hasattr(evidence_client.store, "get_detection_incident"):
-            db_inc = evidence_client.store.get_detection_incident(incident_id)
-            if db_inc:
-                server_det = {
-                    "prediction": db_inc.get("prediction", {}),
-                    "filtered_event": db_inc.get("filtered_event", {}),
-                    "review": db_inc.get("review"),
-                    "created_at": db_inc.get("created_at")
-                }
+        server_det = get_detection_entry(incident_id)
         if not server_det and (client_payload.get("reviewed_by_analyst") or (client_payload.get("has_disagreement") is False and "disagree" in str(client_payload).lower())):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -876,7 +926,8 @@ async def store_evidence(
 
     try:
         evidence_client = EvidenceService.get_instance()
-        receipt = evidence_client.store_evidence(
+        receipt = await asyncio.to_thread(
+            evidence_client.store_evidence,
             case_id=case_id,
             incident_type=req_data.incident_type,
             target_asset=req_data.target_asset,
@@ -884,11 +935,12 @@ async def store_evidence(
             investigator=officer_name,
             officer_id=officer_id
         )
+        invalidate_chain_verification_cache()
 
         AuditLogger.log_api_call(
             endpoint="/evidence/store",
             method="POST",
-            client_ip=request.client.host if request.client else "127.0.0.1",
+            client_ip=get_client_ip(request),
             status_code=200,
             officer_id=officer_id,
             details=f"Anchored evidence for {case_id} (hash: {receipt['evidence_hash'][:16]}...)"
@@ -914,9 +966,10 @@ async def store_evidence(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception(f"Unexpected error during evidence anchoring: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Evidence anchoring failed: {str(e)}"
+            detail="An internal error occurred while storing and anchoring forensic evidence."
         )
 
 @app.get("/cases", tags=["Case Management"])
@@ -970,15 +1023,20 @@ async def store_merkle_batch(
         investigator = current_user.get("full_name", current_user.get("sub", "Evidence Officer"))
         officer_id = current_user.get("officer_id", "INSA-SYS-01")
 
-        batch_res = evidence_client.store_batch_merkle(
+        batch_res = await asyncio.to_thread(
+            evidence_client.store_batch_merkle,
             case_id=case_id,
             events=req_data.events,
             investigator=investigator,
             officer_id=officer_id
         )
+        invalidate_chain_verification_cache()
         return batch_res
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Merkle batch anchoring error: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred while anchoring Merkle batch.")
 
 @app.post("/evidence/verify", tags=["Evidence Ledger"])
 async def verify_evidence(
@@ -989,7 +1047,7 @@ async def verify_evidence(
     """Verify digital evidence integrity against ledger (Restricted to authenticated roles)."""
     try:
         evidence_client = EvidenceService.get_instance()
-        result = evidence_client.verify_evidence(req_data.evidence_payload)
+        result = await asyncio.to_thread(evidence_client.verify_evidence, req_data.evidence_payload)
 
         inc_verification_stat("total_queries")
         if result.get("is_authentic", False):
@@ -1000,14 +1058,17 @@ async def verify_evidence(
         AuditLogger.log_api_call(
             endpoint="/evidence/verify",
             method="POST",
-            client_ip=request.client.host if request.client else "127.0.0.1",
+            client_ip=get_client_ip(request),
             status_code=200,
             details=f"Integrity check result: {result.get('is_authentic')} for hash {result.get('calculated_hash', '')[:16]}..."
         )
 
         return result
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Evidence verification error: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred during evidence verification.")
 
 @app.get("/evidence", tags=["Evidence Ledger"])
 async def list_evidence(current_user: Dict[str, Any] = Depends(require_role({ROLE_ANALYST, ROLE_INVESTIGATOR, ROLE_COURT_AUDITOR, ROLE_SYSTEM_ADMIN}))):
@@ -1569,14 +1630,14 @@ async def get_evidence_by_hash(
 async def system_stats(current_user: Dict[str, Any] = Depends(require_role({ROLE_ANALYST, ROLE_INVESTIGATOR, ROLE_COURT_AUDITOR, ROLE_SYSTEM_ADMIN}))):
     """Retrieve high-level forensic telemetry and blockchain metrics."""
     evidence_client = EvidenceService.get_instance()
-    chain_stats = evidence_client.get_chain_stats()
+    chain_stats = await asyncio.to_thread(evidence_client.get_chain_stats)
 
     total_events = 0
     total_threats = 0
     try:
         stream_url = getattr(settings, "STREAM_API_URL", "http://127.0.0.1:8100")
-        with httpx.Client(timeout=1.5) as client:
-            resp = client.get(f"{stream_url}/status")
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            resp = await client.get(f"{stream_url}/status")
             if resp.status_code == 200:
                 s_data = resp.json()
                 total_events = s_data.get("events_scored", 0)
@@ -1617,12 +1678,14 @@ class CloudStreamEngine:
     In-process, asynchronous streaming pipeline fallback for cloud/container environments (e.g., Render/Docker)
     where WSL (wsl.exe) is not available. Generates realistic network telemetry flows, scores them
     using real DetectionService (XGBoost), aggregates tumbling windows, and tracks alerts.
+    Persists counters, alerts, and window aggregates to SQLite across worker restarts.
     """
     def __init__(self):
         self.is_running = False
         self.rate = 200
-        self.events_scored = 0
-        self.threats_detected = 0
+        saved = load_stream_state()
+        self.events_scored = saved.get("events_scored", 0)
+        self.threats_detected = saved.get("threats_detected", 0)
         self.events_per_sec = 0.0
         self.consumer_lag = 0
         self.deadletter_count = 0
@@ -1683,7 +1746,7 @@ class CloudStreamEngine:
 
                 now_iso = datetime.now(timezone.utc).isoformat()
                 for ev in events:
-                    res = detector.predict(ev)
+                    res = await asyncio.to_thread(detector.predict, ev)
                     pred_class = res.get("threat_category") or "BENIGN"
                     is_threat = bool(res.get("is_threat", False)) or (pred_class != "BENIGN")
                     confidence = float(res.get("confidence", 0.99))
@@ -1716,22 +1779,27 @@ class CloudStreamEngine:
                         "destination_ip": str(ev.get("destination_ip", "192.0.2.1"))
                     }
                     self.recent_alerts.insert(0, alert_record)
+                    record_stream_alert(alert_record)
 
                 if len(self.recent_alerts) > 200:
                     self.recent_alerts = self.recent_alerts[:200]
+
+                save_stream_state(self.events_scored, self.threats_detected, self.is_running, self.rate)
 
                 self.events_per_sec = float(self.rate + random.uniform(-2.5, 3.5))
                 self.consumer_lag = random.randint(0, 4)
 
                 if window_events >= (self.rate * 2) or len(window_confs) >= 200:
                     mean_conf = sum(window_confs) / max(1, len(window_confs))
-                    self.windows.insert(0, {
+                    win_rec = {
                         "window_start": window_start_iso,
                         "window_end": now_iso,
                         "event_count": window_events,
                         "class_counts": dict(window_classes),
                         "mean_confidence": round(mean_conf, 4)
-                    })
+                    }
+                    self.windows.insert(0, win_rec)
+                    record_stream_window(win_rec)
                     if len(self.windows) > 20:
                         self.windows = self.windows[:20]
                     window_events = 0
@@ -1762,7 +1830,9 @@ class CloudStreamEngine:
 
     def get_alerts(self, limit: int = 50, threats_only: bool = False) -> Dict[str, Any]:
         alerts = self.recent_alerts
-        if threats_only:
+        if not alerts:
+            alerts = get_stream_alerts(limit=limit, threats_only=threats_only)
+        elif threats_only:
             alerts = [a for a in alerts if a.get("is_threat") or a.get("predicted_class") != "BENIGN"]
         return {
             "alerts": alerts[:limit],
@@ -1770,9 +1840,12 @@ class CloudStreamEngine:
         }
 
     def get_windows(self, limit: int = 20) -> Dict[str, Any]:
+        wins = self.windows
+        if not wins:
+            wins = get_stream_windows(limit=limit)
         return {
-            "windows": self.windows[:limit],
-            "total": len(self.windows)
+            "windows": wins[:limit],
+            "total": len(wins)
         }
 
 cloud_stream = CloudStreamEngine()
@@ -1944,7 +2017,7 @@ async def stream_control(
     AuditLogger.log_api_call(
         endpoint="/stream/control",
         method="POST",
-        client_ip=request.client.host if request.client else "127.0.0.1",
+        client_ip=get_client_ip(request),
         status_code=200,
         officer_id=officer_id,
         details=f"Stream pipeline action '{action}' executed with rate {rate} by {officer_id}: {out_msg[:120]}"

@@ -1510,6 +1510,32 @@ class SqliteLedgerStore(LedgerStore):
         finally:
             conn.close()
 
+    def get_all_merkle_batches(self) -> List[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT * FROM merkle_batches ORDER BY created_at ASC")
+            batches = []
+            for r in cur.fetchall():
+                b = dict(r)
+                if b.get("leaf_hashes_json"):
+                    try:
+                        b["leaf_hashes"] = json.loads(b["leaf_hashes_json"])
+                    except Exception:
+                        b["leaf_hashes"] = []
+                batches.append(b)
+            return batches
+        finally:
+            conn.close()
+
+    def get_merkle_batches_count(self) -> int:
+        conn = self._get_connection()
+        try:
+            cur = conn.execute("SELECT COUNT(*) FROM merkle_batches")
+            row = cur.fetchone()
+            return row[0] if row else 0
+        finally:
+            conn.close()
+
     def close(self):
         # sqlite3 connections in WAL mode are managed per query
         pass

@@ -233,3 +233,150 @@ def test_certificate_download_endpoint_stability(inv_token, cicids_samples):
     assert cert_res.status_code == 200
     assert "text/html" in cert_res.headers.get("content-type", "")
     assert "Forensic Evidence Integrity Certificate" in cert_res.text
+
+
+# --- Finding 7: Process Memory State Persistence across Restarts ---
+def test_finding_7_state_persistence():
+    from backend.main import SERVER_DETECTION_STORE, save_detection_entry, get_detection_entry, is_ledger_integrity_acknowledged, set_ledger_integrity_acknowledged
+    from backend.user_store import save_stream_state, load_stream_state, record_stream_alert, get_stream_alerts, record_stream_window, get_stream_windows
+
+    # 1. Detection Results persistence
+    test_inc_id = "INSA-CR-TEST-PERSIST-99"
+    entry = {
+        "prediction": {"threat_category": "PortScan", "confidence": 0.98, "is_threat": True},
+        "filtered_event": {"target_asset": "Server-Alpha", "source_ip": "10.0.0.5"},
+        "review": None,
+        "created_at": "2026-11-09T00:00:00Z"
+    }
+    save_detection_entry(test_inc_id, entry)
+    # Clear in-memory cache to simulate server restart
+    SERVER_DETECTION_STORE.pop(test_inc_id, None)
+    # Retrieve from DB
+    loaded = get_detection_entry(test_inc_id)
+    assert loaded is not None
+    assert loaded["prediction"]["threat_category"] == "PortScan"
+    assert loaded["filtered_event"]["target_asset"] == "Server-Alpha"
+
+    # 2. Acknowledged flag persistence
+    set_ledger_integrity_acknowledged(True)
+    assert is_ledger_integrity_acknowledged() is True
+
+    # 3. Stream Engine state persistence
+    save_stream_state(events_scored=1234, threats_detected=56, is_running=True, rate=250)
+    st = load_stream_state()
+    assert st["events_scored"] == 1234
+    assert st["threats_detected"] == 56
+    assert st["rate"] == 250
+
+    # Stream alerts & windows persistence
+    alert = {"event_id": "ev-test-1", "predicted_class": "DDoS", "is_threat": True, "scored_at": "2026-11-09T00:00:00Z"}
+    record_stream_alert(alert)
+    alerts = get_stream_alerts(limit=5)
+    assert any(a["event_id"] == "ev-test-1" for a in alerts)
+
+    window = {"window_start": "2026-11-09T00:00:00Z", "event_count": 500, "mean_confidence": 0.95}
+    record_stream_window(window)
+    windows = get_stream_windows(limit=5)
+    assert any(w["event_count"] == 500 for w in windows)
+
+# --- Finding 8: Client IP Extraction & Scoped Account Lockout ---
+def test_finding_8_client_ip_and_scoped_lockout():
+    from backend.security import get_client_ip
+    from backend.user_store import authenticate_user, is_account_locked, get_user_by_username
+    from unittest.mock import MagicMock
+
+    # 1. get_client_ip parses X-Forwarded-For
+    req = MagicMock()
+    req.headers = {"X-Forwarded-For": "203.0.113.195, 10.0.0.1"}
+    req.client.host = "10.0.0.1"
+    assert get_client_ip(req) == "203.0.113.195"
+
+    req2 = MagicMock()
+    req2.headers = {"X-Real-IP": "198.51.100.42"}
+    req2.client.host = "10.0.0.1"
+    assert get_client_ip(req2) == "198.51.100.42"
+
+    # 2. Account lockout is scoped to attacker's IP
+    attacker_ip = "198.51.100.99"
+    legit_ip = "203.0.113.1"
+    test_user = "test_lockout_user"
+    from backend.user_store import create_user
+    try:
+        create_user(test_user, "Lockout Test User", "analyst", "SecurePassword123!")
+    except Exception:
+        pass
+
+    # Attacker fails 5 times
+    for _ in range(5):
+        authenticate_user(test_user, "WrongPassword123!", client_ip=attacker_ip)
+
+    # User is locked from attacker's IP
+    u = get_user_by_username(test_user)
+    assert is_account_locked(u, client_ip=attacker_ip) is True
+    # But legitimate user from different IP is NOT locked out
+    assert is_account_locked(u, client_ip=legit_ip) is False
+
+# --- Finding 9 & 10: Server Freeze Under Load & Wasted Work Per Request ---
+def test_finding_9_and_10_caching_and_wasted_work():
+    from backend.main import _CHAIN_VERIFY_CACHE, invalidate_chain_verification_cache
+    from backend.security import AuditLogger
+    from backend.user_store import cleanup_expired_tokens
+
+    # 1. Health chain verification TTL cache
+    invalidate_chain_verification_cache()
+    resp1 = client.get("/health")
+    assert resp1.status_code == 200
+    ts1 = _CHAIN_VERIFY_CACHE["timestamp"]
+    assert ts1 > 0
+
+    # Second call uses cache
+    resp2 = client.get("/health")
+    assert resp2.status_code == 200
+    ts2 = _CHAIN_VERIFY_CACHE["timestamp"]
+    assert ts1 == ts2  # Served from cache without re-verifying whole chain
+
+    # Invalidation works
+    invalidate_chain_verification_cache()
+    assert _CHAIN_VERIFY_CACHE["timestamp"] == 0.0
+
+    # 2. Audit logger tail seeking
+    last_h = AuditLogger.get_latest_hash()
+    assert last_h is not None
+    assert len(last_h) == 64
+
+    # 3. Token denylist cleanup runs without error
+    cleaned = cleanup_expired_tokens()
+    assert cleaned >= 0
+
+# --- Finding 11: Safe Transaction Retries & EIP-1559 Fees ---
+def test_finding_11_safe_tx_and_eip1559():
+    from blockchain.web3_client import Web3EvidenceClient
+    from unittest.mock import MagicMock
+    client_mock = Web3EvidenceClient()
+
+    # 1. Fallback when disconnected
+    gas_params_default = client_mock._build_fee_params()
+    assert "gasPrice" in gas_params_default
+
+    # 2. When connected to EVM node supporting EIP-1559 (has baseFeePerGas)
+    mock_w3 = MagicMock()
+    mock_w3.eth.get_block.return_value = {"baseFeePerGas": 10000000000}
+    mock_w3.eth.max_priority_fee = 2000000000
+    gas_params = client_mock._build_fee_params(w3=mock_w3)
+    assert gas_params["type"] == 2
+    assert "maxFeePerGas" in gas_params
+    assert "maxPriorityFeePerGas" in gas_params
+    assert gas_params["maxPriorityFeePerGas"] == 2000000000
+    assert gas_params["maxFeePerGas"] == int(10000000000 * 1.3) + 2000000000
+
+# --- Finding 12: Sanitized Error Responses & Verify Public Oracle Removal ---
+def test_finding_12_sanitized_errors_and_verify_public_no_oracle():
+    # Verify unauthenticated verify-public returns NOT FOUND for unknown hash / raw_text
+    resp = client.post("/evidence/verify-public", json={"evidence_hash": "a" * 64})
+    assert resp.status_code == 200
+    assert resp.json()["verdict"] == "NOT FOUND"
+
+    # Probing with valid-looking case ID does NOT leak existence via HASH MISMATCH
+    probe_resp = client.post("/evidence/verify-public", json={"raw_text": '{"case_id": "INSA-CR-2026-TEST", "payload": "fake"}'})
+    assert probe_resp.status_code == 200
+    assert probe_resp.json()["verdict"] == "NOT FOUND"

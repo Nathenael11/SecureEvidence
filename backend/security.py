@@ -168,34 +168,97 @@ def require_role(roles: Union[str, Set[str], List[str]]):
     return role_checker
 
 # Alias for backward compatibility
+# Alias for backward compatibility
 require_roles = require_role
 
+def get_client_ip(request: Optional[Request]) -> str:
+    """
+    Extract the true client IP address, properly accounting for reverse proxies
+    such as Render, Cloudflare, AWS ALB, and Nginx via X-Forwarded-For.
+    """
+    if not request:
+        return "127.0.0.1"
+    headers = getattr(request, "headers", None)
+    if headers:
+        forwarded = None
+        real_ip = None
+        for k, v in headers.items():
+            k_lower = k.lower()
+            if k_lower == "x-forwarded-for" and not forwarded:
+                forwarded = v
+            elif k_lower == "x-real-ip" and not real_ip:
+                real_ip = v
+        if forwarded:
+            first_ip = forwarded.split(",")[0].strip()
+            if first_ip:
+                return first_ip
+        if real_ip and real_ip.strip():
+            return real_ip.strip()
+    if getattr(request, "client", None) and getattr(request.client, "host", None):
+        return request.client.host
+    return "127.0.0.1"
+
 class RateLimiter:
-    """Simple in-memory sliding-window rate limiter per client IP."""
-    def __init__(self, max_requests: int = 15, window_seconds: int = 60):
+    """Sliding-window rate limiter per client IP with SQLite persistence and memory fallback."""
+    def __init__(self, max_requests: int = 15, window_seconds: int = 60, name: Optional[str] = None):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
+        self.name = name or str(id(self))
         self._history: Dict[str, List[float]] = {}
         self._lock = threading.Lock()
 
     def check_rate_limit(self, client_ip: str) -> bool:
         now = time.time()
-        with self._lock:
-            timestamps = self._history.get(client_ip, [])
-            valid_timestamps = [t for t in timestamps if now - t < self.window_seconds]
-            if len(valid_timestamps) >= self.max_requests:
+        cutoff = now - self.window_seconds
+        # 1. Try SQLite persistence so rate limits are shared across workers and survive restarts
+        try:
+            from backend.user_store import get_connection
+            conn = get_connection()
+            try:
+                with conn:
+                    conn.execute("DELETE FROM rate_limits WHERE timestamp < ?", (cutoff,))
+                    cur = conn.execute(
+                        "SELECT COUNT(*) FROM rate_limits WHERE limiter_name = ? AND client_ip = ? AND timestamp >= ?",
+                        (self.name, client_ip, cutoff)
+                    )
+                    count = cur.fetchone()[0]
+                    if count >= self.max_requests:
+                        return False
+                    conn.execute(
+                        "INSERT INTO rate_limits (limiter_name, client_ip, timestamp) VALUES (?, ?, ?)",
+                        (self.name, client_ip, now)
+                    )
+                    return True
+            finally:
+                conn.close()
+        except Exception:
+            # 2. Fallback to thread-safe in-memory sliding window
+            with self._lock:
+                timestamps = self._history.get(client_ip, [])
+                valid_timestamps = [t for t in timestamps if now - t < self.window_seconds]
+                if len(valid_timestamps) >= self.max_requests:
+                    self._history[client_ip] = valid_timestamps
+                    return False
+                valid_timestamps.append(now)
                 self._history[client_ip] = valid_timestamps
-                return False
-            valid_timestamps.append(now)
-            self._history[client_ip] = valid_timestamps
-            return True
+                return True
 
     def reset(self):
         with self._lock:
             self._history.clear()
+        try:
+            from backend.user_store import get_connection
+            conn = get_connection()
+            try:
+                with conn:
+                    conn.execute("DELETE FROM rate_limits WHERE limiter_name = ?", (self.name,))
+            finally:
+                conn.close()
+        except Exception:
+            pass
 
-public_verifier_limiter = RateLimiter(max_requests=30, window_seconds=60)
-login_limiter = RateLimiter(max_requests=10, window_seconds=60)
+public_verifier_limiter = RateLimiter(max_requests=30, window_seconds=60, name="public_verifier")
+login_limiter = RateLimiter(max_requests=10, window_seconds=60, name="login")
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Injects HTTP security headers and enforces request size limits."""
@@ -228,30 +291,44 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 class AuditLogger:
     """
     Append-only, hash-linked JSON-lines persistent audit logger.
-    Persists to disk with integrity verification.
+    Persists to disk with integrity verification and fast tail-hash caching.
     """
 
     _lock = threading.Lock()
     _log_file = settings.AUDIT_LOG_FILE
+    _last_hash: Optional[str] = None
 
     @classmethod
     def set_log_file(cls, path: str):
         with cls._lock:
             cls._log_file = path
+            cls._last_hash = None
 
     @classmethod
     def get_latest_hash(cls) -> str:
+        if cls._last_hash is not None:
+            return cls._last_hash
         if not os.path.exists(cls._log_file):
-            return "0" * 64
-        with open(cls._log_file, "r", encoding="utf-8") as f:
-            lines = [l.strip() for l in f if l.strip()]
-        if not lines:
-            return "0" * 64
+            cls._last_hash = "0" * 64
+            return cls._last_hash
         try:
-            last_entry = json.loads(lines[-1])
-            return last_entry.get("log_hash", "0" * 64)
+            with open(cls._log_file, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                size = f.tell()
+                if size == 0:
+                    cls._last_hash = "0" * 64
+                    return cls._last_hash
+                read_size = min(size, 8192)
+                f.seek(size - read_size)
+                lines = f.read().decode("utf-8", errors="replace").strip().splitlines()
+                if lines:
+                    last_entry = json.loads(lines[-1])
+                    cls._last_hash = last_entry.get("log_hash", "0" * 64)
+                    return cls._last_hash
         except Exception:
-            return "0" * 64
+            pass
+        cls._last_hash = "0" * 64
+        return cls._last_hash
 
     @classmethod
     def log_api_call(
@@ -283,6 +360,7 @@ class AuditLogger:
             canonical = json.dumps(entry, sort_keys=True, separators=(',', ':'))
             log_hash = hashlib.sha256(canonical.encode('utf-8')).hexdigest()
             entry["log_hash"] = log_hash
+            cls._last_hash = log_hash
 
             os.makedirs(os.path.dirname(os.path.abspath(cls._log_file)), exist_ok=True)
             with open(cls._log_file, "a", encoding="utf-8") as f:
