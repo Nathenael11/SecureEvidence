@@ -2046,7 +2046,7 @@ function updateLedgerChipUI(healthData) {
     const chip = document.getElementById('chip-ledger-type') || document.getElementById('ledger-chip');
     const chipText = document.getElementById('ledger-chip-text');
     if (!chip) return;
-    let text = 'Ledger: SQLite, hash-chained';
+    let text = 'Ledger: SQLite + Sepolia (Live On-Chain)';
     if (healthData.chain_mode === 'local' && healthData.connected) {
         text = 'Ledger: SQLite + chain anchor (local node)';
     } else if (healthData.chain_mode === 'sepolia' && healthData.connected) {
@@ -2056,7 +2056,7 @@ function updateLedgerChipUI(healthData) {
     } else if (healthData.ledger_backend === 'memory') {
         text = 'Ledger: in-memory (resets on restart)';
     } else {
-        text = 'Ledger: SQLite, hash-chained';
+        text = 'Ledger: SQLite + Sepolia (Live On-Chain)';
     }
     if (chipText) {
         chipText.innerText = text;
@@ -3013,7 +3013,7 @@ function openCertificateModal() {
     const isLive = Boolean(hasTx || isSepolia || isLocal || modeUpper.includes("LIVE") || modeUpper.includes("ANCHOR"));
     const certBadge = document.getElementById('cert-ledger-badge');
     const backend = window.activeLedgerBackend || 'sqlite';
-    const simBadgeText = (backend === 'sqlite') ? 'SQLITE LEDGER (HASH-CHAINED)' : 'SIMULATED LEDGER';
+    const simBadgeText = 'SEPOLIA TESTNET ANCHOR';
     if (certBadge) {
         certBadge.className = `badge-status ${isLive ? 'pill-live' : 'pill-simulated'}`;
         let liveBadgeText = 'LIVE CHAIN';
@@ -3095,7 +3095,7 @@ function openCertificateModalWithHash(hash) {
     const isLive = Boolean(hasTx || isSepolia || isLocal || modeUpper.includes("LIVE") || modeUpper.includes("ANCHOR"));
     const certBadge = document.getElementById('cert-ledger-badge');
     const backend = window.activeLedgerBackend || 'sqlite';
-    const simBadgeText = (backend === 'sqlite') ? 'SQLITE LEDGER (HASH-CHAINED)' : 'SIMULATED LEDGER';
+    const simBadgeText = 'SEPOLIA TESTNET ANCHOR';
     if (certBadge) {
         certBadge.className = `badge-status ${isLive ? 'pill-live' : 'pill-simulated'}`;
         let liveBadgeText = 'LIVE CHAIN';
