@@ -229,9 +229,33 @@ contract EvidenceTracker {
     }
 
     /**
-     * @notice Verify whether a target evidence hash is anchored and unmodified.
+     * @notice Revoke an evidence record from the active sovereign registry.
+     *         Preserves historical audit log while marking status as REVOKED.
      */
-    function verifyEvidence(bytes32 evidenceHash) external returns (
+    function revokeEvidence(
+        bytes32 evidenceHash,
+        string calldata reason
+    ) external onlyRole(ADMIN_ROLE) whenNotPaused returns (bool) {
+        require(evidenceRegistry[evidenceHash].exists, "Evidence not found");
+        require(evidenceRegistry[evidenceHash].status != RecordStatus.REVOKED, "Record already revoked");
+
+        evidenceRegistry[evidenceHash].status = RecordStatus.REVOKED;
+
+        emit EvidenceRevoked(
+            evidenceHash,
+            evidenceRegistry[evidenceHash].caseId,
+            msg.sender,
+            reason
+        );
+
+        return true;
+    }
+
+    /**
+     * @notice Verify whether a target evidence hash is anchored and unmodified.
+     *         View function consuming zero gas and non-spammable.
+     */
+    function verifyEvidence(bytes32 evidenceHash) external view returns (
         bool isAuthentic,
         bool isSuperseded,
         string memory caseId,
@@ -241,11 +265,9 @@ contract EvidenceTracker {
     ) {
         EvidenceRecord memory rec = evidenceRegistry[evidenceHash];
         if (!rec.exists || rec.status == RecordStatus.REVOKED) {
-            emit EvidenceVerified(evidenceHash, false, "", block.timestamp);
             return (false, false, "", 0, 0, bytes32(0));
         }
 
-        emit EvidenceVerified(evidenceHash, true, rec.caseId, block.timestamp);
         return (
             true,
             rec.status == RecordStatus.SUPERSEDED,

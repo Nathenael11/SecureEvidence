@@ -23,6 +23,16 @@ DOCUMENTATION_IPS_EXTERNAL = [
     "198.51.100.45", "198.51.100.88", "203.0.113.15", "203.0.113.99"
 ]
 
+SCENARIO_LABEL_MAP: Dict[str, str] = {
+    "normal": "BENIGN",
+    "ddos": "DDoS",
+    "portscan": "PortScan",
+    "ssh_patator": "SSH-Patator",
+    "web_attack": "Web_Attack",
+    "botnet": "Bot",
+    "dos_hulk": "DoS Hulk",
+}
+
 NEUTRAL_ASSETS = [
     "National-Gateway-Demo-01",
     "Commercial-Core-Switch-02",
@@ -66,7 +76,8 @@ def generate_live_event() -> Dict[str, Any]:
         "target_asset": random.choice(NEUTRAL_ASSETS),
         "source_ip": random.choice(DOCUMENTATION_IPS_EXTERNAL),
         "destination_ip": random.choice(DOCUMENTATION_IPS_INTERNAL),
-        "protocol": "TCP"
+        "protocol": "TCP",
+        "ground_truth_label": SCENARIO_LABEL_MAP.get(scenario, "BENIGN")
     })
     
     if scenario == "normal":
@@ -141,6 +152,21 @@ def generate_live_event() -> Dict[str, Any]:
             "PSH Flag Count": 1.0,
             "ACK Flag Count": 1.0,
             "Init_Win_bytes_forward": 14600.0
+        })
+    elif scenario == "botnet":
+        flow.update({
+            "target_asset": "Commercial-Core-Switch-02",
+            "Flow Duration": round(random.uniform(50000.0, 150000.0), 1),
+            "Flow Packets/s": round(random.uniform(15.0, 60.0), 1),
+            "Flow Bytes/s": round(random.uniform(2000.0, 12000.0), 1),
+            "Total Fwd Packets": float(random.randint(6, 18)),
+            "Total Backward Packets": float(random.randint(4, 14)),
+            "SYN Flag Count": 0.0,
+            "RST Flag Count": 0.0,
+            "PSH Flag Count": 1.0,
+            "ACK Flag Count": 1.0,
+            "Init_Win_bytes_forward": 8192.0,
+            "Init_Win_bytes_backward": 254.0
         })
     else:  # web_attack
         flow.update({

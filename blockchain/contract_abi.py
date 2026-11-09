@@ -1,7 +1,7 @@
-# SecureEvidence Smart Contract ABI
-import json
+# -*- coding: utf-8 -*-
+"""Auto-generated EvidenceTracker Contract ABI."""
 
-EVIDENCE_TRACKER_ABI_JSON = '''[
+EVIDENCE_TRACKER_ABI = [
   {
     "inputs": [],
     "stateMutability": "nonpayable",
@@ -551,6 +551,30 @@ EVIDENCE_TRACKER_ABI_JSON = '''[
     "inputs": [
       {
         "internalType": "bytes32",
+        "name": "evidenceHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      }
+    ],
+    "name": "revokeEvidence",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
         "name": "role",
         "type": "bytes32"
       },
@@ -743,9 +767,7 @@ EVIDENCE_TRACKER_ABI_JSON = '''[
         "type": "bytes32"
       }
     ],
-    "stateMutability": "nonpayable",
+    "stateMutability": "view",
     "type": "function"
   }
-]'''
-
-EVIDENCE_TRACKER_ABI = json.loads(EVIDENCE_TRACKER_ABI_JSON)
+]

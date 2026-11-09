@@ -298,5 +298,42 @@ describe("EvidenceTracker Smart Contract", function () {
         evidenceTracker.connect(admin).anchorLedgerHead(ethers.ZeroHash, 10)
       ).to.be.revertedWith("Invalid head hash");
     });
+
+    it("Admin can revoke evidence and verifyEvidence returns false", async function () {
+      await evidenceTracker.connect(analyst).storeEvidence(
+        sampleEvidenceHash,
+        sampleRawHash,
+        sampleMerkleRoot,
+        "INSA-CR-2026-REVOKE",
+        "DDoS",
+        "EthioTelecom-GW",
+        "Nathenael Ermias",
+        "ipfs://QmHash1"
+      );
+
+      // Non-admin cannot revoke
+      await expect(
+        evidenceTracker.connect(analyst).revokeEvidence(sampleEvidenceHash, "Tampered chain of custody")
+      ).to.be.revertedWith("SecureEvidence: Unauthorized role");
+
+      // Admin revokes evidence
+      const tx = await evidenceTracker.connect(admin).revokeEvidence(
+        sampleEvidenceHash,
+        "Tampered chain of custody"
+      );
+
+      await expect(tx)
+        .to.emit(evidenceTracker, "EvidenceRevoked")
+        .withArgs(sampleEvidenceHash, "INSA-CR-2026-REVOKE", admin.address, "Tampered chain of custody");
+
+      // Record status must now be REVOKED (2)
+      const rec = await evidenceTracker.getEvidenceRecord(sampleEvidenceHash);
+      expect(rec.status).to.equal(2n);
+
+      // verifyEvidence (view function) returns isAuthentic == false
+      const verif = await evidenceTracker.verifyEvidence(sampleEvidenceHash);
+      expect(verif[0]).to.equal(false);
+    });
+
   });
 });

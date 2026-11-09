@@ -50,10 +50,10 @@ SecureEvidence enforces strict non-repudiation and tamper detection across digit
 - **Smart Contract (`EvidenceTracker.sol`)**:
   - `storeEvidence(evidenceHash, rawArtifactHash, merkleRoot, caseId, incidentType, targetAsset, investigator, ipfsCid)`
   - `anchorLedgerHead(headHash, recordCount)` — enforces strictly monotonic record counters; reverts if `recordCount` decreases.
-  - Role-based permissions via OpenZeppelin `AccessControl` (`AUDITOR_ROLE`, `ANALYST_ROLE`, `DEFAULT_ADMIN_ROLE`).
-- **Data Minimization (Hashes Only)**:
-  - Anchored on-chain: 32-byte cryptographic fingerprints (`evidenceHash`, `rawArtifactHash`, `modelHash`, `headHash`).
-  - Never placed on-chain: Raw telemetry, packet payloads, officer personal names, internal network topologies, or IP addresses.
+  - Custom role-based access control (RBAC) via contract-level role mapping (`ADMIN_ROLE`, `ANALYST_ROLE`, `AUDITOR_ROLE`, `COLLECTOR_ROLE`) optimized for gas efficiency.
+- **Data Minimization & Reference Metadata**:
+  - Anchored on-chain: 32-byte cryptographic fingerprints (`evidenceHash`, `rawArtifactHash`, `merkleRoot`, `headHash`) paired with administrative reference identifiers (`caseId`, `incidentType`, `targetAsset`).
+  - Never placed on-chain: Raw packet payloads, PCAP binaries, internal network IP addresses, or sensitive evidence contents (held strictly in local custodial stores).
 
 ---
 
@@ -77,12 +77,12 @@ SecureEvidence enforces strict non-repudiation and tamper detection across digit
 
 | Threat Category | Threat Description | Security Controls & Mitigations | Residual Risks |
 | :--- | :--- | :--- | :--- |
-| **Spoofing Identity** | Adversary attempts to forge investigator attribution or replay evidence tokens. | Identity bound strictly to authenticated JWT claims (`full_name`, `sub`, `officer_id`). Request body spoofing is rejected. Submitter service address is role-authenticated on-chain via `AccessControl`. | Key custody: In local/demo mode, private keys reside in `.env`. Production requires hardware security modules (HSM) and client-side signing. |
+| **Spoofing Identity** | Adversary attempts to forge investigator attribution or replay evidence tokens. | Identity bound strictly to authenticated JWT claims (`full_name`, `sub`, `officer_id`). Request body spoofing is rejected. Submitter service address is role-authenticated on-chain via contract RBAC. | Key custody: In local/demo mode, private keys reside in `.env`. Production requires hardware security modules (HSM) and client-side signing. |
 | **Tampering with Data** | Insider or intruder alters historical evidence records, timestamps, or log entries. | SQLite append-only triggers reject `UPDATE`/`DELETE`. SHA-256 hash chaining flags any modified byte. On-chain fingerprints detect recomputed local databases. | Chain reorg / testnet reset: Deep reorganizations on public testnets could invalidate recent transactions. Handled via multiple confirmation checks (2 confirmations on Sepolia). |
 | **Repudiation** | Submitter or investigator denies having created or verified an evidence record. | Officer SECP256R1 ECDSA digital signatures, append-only custodial audit logs, on-chain transaction receipts with verifiable tx hash and block number. | Timestamp authority: Timestamps are internal server clock time, not legally certified RFC 3161 timestamps. |
 | **Information Disclosure** | Leakage of classified infrastructure telemetry or citizen network communications. | Hashes only: Zero raw packet data, IP addresses, or personal data sent to the blockchain. All raw artifacts stored only on private local filesystems. | Payload guessing: Extremely low-entropy payloads could theoretically be targeted by precomputation; prevented by structured canonical serialization with incident IDs and timestamps. |
 | **Denial of Service** | Flooding backend or exhausting EVM gas balances with high-volume anchoring requests. | Sliding-window IP rate limiters, coverage gating (<60% coverage rejected), transaction gas bounds (500,000 gas limit), and exponential backoff retry logic. | RPC provider availability: Outage of public/third-party RPC endpoints causes 503 fallback. Mitigated in production by private consortium validator nodes. |
-| **Elevation of Privilege** | Attacker calls administrative functions such as `anchorLedgerHead` or alters system roles. | FastAPI RBAC dependencies (`require_role`), OpenZeppelin on-chain role checks (`AUDITOR_ROLE`, `DEFAULT_ADMIN_ROLE`), Argon2id password hashing with account lockout. | RPC trust: Reliance on an untrusted external RPC endpoint could permit spoofing view calls. Mitigated by chain ID verification and internal hash-chain validation. |
+| **Elevation of Privilege** | Attacker calls administrative functions such as `anchorLedgerHead` or alters system roles. | FastAPI RBAC dependencies (`require_role`), Contract on-chain role checks (`AUDITOR_ROLE`, `ADMIN_ROLE`), bcrypt password hashing with account lockout. | RPC trust: Reliance on an untrusted external RPC endpoint could permit spoofing view calls. Mitigated by chain ID verification and internal hash-chain validation. |
 
 ---
 

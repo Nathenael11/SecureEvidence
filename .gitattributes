@@ -1,0 +1,6 @@
+# Git LFS configuration for machine learning weights and large models
+ai_engine/models/threat_detector_xgb.json filter=lfs diff=lfs merge=lfs -text
+*.joblib filter=lfs diff=lfs merge=lfs -text
+*.pt filter=lfs diff=lfs merge=lfs -text
+*.parquet filter=lfs diff=lfs merge=lfs -text
+*.bin filter=lfs diff=lfs merge=lfs -text

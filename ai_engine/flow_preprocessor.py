@@ -35,7 +35,8 @@ CICIDS_KEY_ALIASES: Dict[str, List[str]] = {
     "URG Flag Count": ["urg_flag_count", "urg_count", "urg_flags"],
     "Total Fwd Packets": ["total_fwd_packets", "tot_fwd_pkts", "fwd_packets"],
     "Total Backward Packets": ["total_backward_packets", "tot_bwd_pkts", "bwd_packets"],
-    "Flow Duration": ["flow_duration", "duration"]
+    "Flow Duration": ["flow_duration", "duration"],
+    "Fwd Header Length.1": ["fwd_header_length_1", "fwd_header_length.1"]
 }
 
 

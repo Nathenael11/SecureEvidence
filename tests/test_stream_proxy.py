@@ -159,7 +159,9 @@ def test_stream_control_start_success_and_audit_log():
     mock_proc.stdout = "Spark streaming pipeline started (PID 12345)"
     mock_proc.stderr = ""
 
-    with patch("subprocess.run", return_value=mock_proc) as mock_sub:
+    with patch("shutil.which", return_value="/usr/bin/wsl"), \
+         patch("backend.main.ensure_stream_api_running", return_value=True), \
+         patch("subprocess.run", return_value=mock_proc) as mock_sub:
         res = client.post(
             "/stream/control",
             headers=get_auth_headers("investigator", username="inv_nathenael", officer_id="INSA-INV-42"),

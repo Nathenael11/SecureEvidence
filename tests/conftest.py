@@ -1,15 +1,29 @@
 # -*- coding: utf-8 -*-
+import os
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
-from backend.user_store import init_user_db, create_user, get_user_by_username
+from backend.user_store import init_user_db, create_user, get_user_by_username, _INITIALIZED_DBS
 from backend.security import create_jwt_token, login_limiter, public_verifier_limiter
+
+@pytest.fixture(autouse=True)
+def setup_test_user_db(tmp_path, monkeypatch, request):
+    """Isolate user database per test run so tests never modify the real users.db."""
+    if 'test_e2e_playwright' in request.node.fspath.basename:
+        yield
+        return
+
+    test_user_db = str(tmp_path / "test_users_fixture.db")
+    monkeypatch.setenv("USER_DB_PATH", test_user_db)
+    _INITIALIZED_DBS.discard(test_user_db)
+    init_user_db(test_user_db)
+    yield
+    _INITIALIZED_DBS.discard(test_user_db)
 
 @pytest.fixture(autouse=True)
 def auto_auth_headers(monkeypatch, request):
     login_limiter.reset()
     public_verifier_limiter.reset()
-    init_user_db()
     
     # In test_auth.py, do not inject auto auth headers so auth tests can test unauthenticated / specific logins
     if 'test_auth' in request.node.fspath.basename:

@@ -81,7 +81,7 @@ If anyone modifies even a single byte of the evidence afterward, the recomputed 
         |  - Solidity Smart Contract (EVM / Hardhat)    |   |  - Real-Time AI Detection & TreeSHAP          |
         |  - SQLite Verifiable Hash Chain               |   |  - One-Click Blockchain Anchoring             |
         |  - Merkle Tree Proofs & ECDSA Signatures      |   |  - Interactive Tamper-Testing Engine          |
-        |  - RFC 8785 Canonical JSON Serialization      |   |  - Printable Federal Court Certificate        |
+        |  - Deterministic Canonical JSON Serialization      |   |  - Printable Federal Court Certificate        |
         +-----------------------------------------------+   +-----------------------------------------------+
 ```
 
@@ -93,7 +93,7 @@ If anyone modifies even a single byte of the evidence afterward, the recomputed 
 * **Benchmark Dataset**: Trained on the Canadian Institute for Cybersecurity **CICIDS2017** dataset.
 * **12 Threat Classes**: Classifies complex volumetric floods (DDoS, DoS Hulk), service discovery (PortScan), command & control (Botnet), credential abuse (SSH-Patator, Web Brute Force), application exploits (SQL Injection), and baseline BENIGN traffic.
 * **Explainable AI (TreeSHAP)**: Rather than giving a blind score, the console breaks down the top mathematical drivers of each decision (e.g. forward packet volume, inter-arrival time mean, TCP SYN flags).
-* **Coverage Safeguard**: If telemetry contains fewer than 60% of expected flow parameters, the engine flags `INSUFFICIENT_DATA` rather than making blind assumptions or filling zeros.
+* **Coverage Safeguard**: If telemetry contains fewer than 60% of expected flow parameters, the engine flags `INSUFFICIENT_DATA` rather than making blind assumptions. When telemetry satisfies the 60% threshold, unobserved secondary features (up to 40%) are baseline-imputed (0.0/median) while reporting exact coverage and missing feature details in the forensic attestation.
 
 ### 2. Blockchain & Cryptographic Sealing (`blockchain/`)
 * **Smart Contract (`contracts/EvidenceTracker.sol`)**: Solidity contract providing role-based access control, SHA-256 Merkle root verification, and emitted event logs (`EvidenceStored`, `EvidenceVerified`).
@@ -164,7 +164,7 @@ While SecureEvidence is a fully functional end-to-end prototype, scaling it from
 | **Consortium Blockchain** | Operates on a local Hardhat EVM node (port 8545) or public Ethereum testnet (Sepolia) alongside a local SQLite hash chain. | **Sovereign Consortium Network**: Deployment on a private, permissioned Ethereum IBFT 2.0 or Hyperledger Besu consortium with validator nodes distributed across INSA, the Federal High Court, and MInT. |
 | **Telemetry Privacy** | Raw flow statistics are evaluated in application host memory during AI inference. | **Confidential Computing & Zero-Knowledge Proofs (zk-SNARKs)**: Running models inside secure enclaves (Intel SGX / AMD SEV) and using zk-SNARKs so defense counsel can verify evidence validity without exposing sensitive national infrastructure IP addresses. |
 | **Sensor Ingestion Depth** | Requires complete 77-feature NetFlow/IPFIX vectors (basic sensor logs like standard Suricata flows trip the 60% coverage gate and require manual review). | **Kernel-Level eBPF Probes**: Deploying lightweight eBPF / XDP network probes at institutional gateways to natively extract all 77 statistical flow metrics directly at line rate. |
-| **User Authentication** | Argon2id password hashing with account lockout, rate limiting, and JWT token rotation. | **FIDO2 / WebAuthn & MFA**: Implementing hardware-backed biometric security keys and TOTP multi-factor authentication for all forensic roles. |
+| **User Authentication** | bcrypt (12 rounds) password hashing with account lockout, rate limiting, and JWT token rotation. | **FIDO2 / WebAuthn & MFA**: Implementing hardware-backed biometric security keys and TOTP multi-factor authentication for all forensic roles. |
 
 ---
 

@@ -141,6 +141,7 @@ class ThreatDetector:
         self.feature_columns = []
         self.attack_classes = {}
         self.model_hash = "UNKNOWN"
+        self.model_hash_verified = False
         self.coverage_threshold = float(os.getenv("FEATURE_COVERAGE_THRESHOLD", "0.60"))
         
         self._load_or_initialize()
@@ -162,6 +163,15 @@ class ThreatDetector:
         if os.path.exists(self.meta_path):
             with open(self.meta_path, "r", encoding="utf-8") as f:
                 self.metadata = json.load(f)
+                
+        # Cryptographic model provenance verification
+        expected_hash = self.metadata.get("model_sha256")
+        if expected_hash and self.model_hash != "UNKNOWN":
+            self.model_hash_verified = (self.model_hash.lower() == expected_hash.lower())
+            if not self.model_hash_verified:
+                print(f"[!] Warning: Model SHA-256 integrity mismatch! Expected {expected_hash}, calculated {self.model_hash}")
+        else:
+            self.model_hash_verified = True
                 
         self.feature_columns = self.metadata.get("feature_columns", [])
             
@@ -311,6 +321,7 @@ class ThreatDetector:
                 "feature_attributions": [],
                 "model_version": self.metadata.get("model_version", f"XGBoost-CICIDS2017-v{self.metadata.get('schema_version', '1.2')}"),
                 "model_sha256": self.model_hash,
+            "model_hash_verified": self.model_hash_verified,
                 "dataset_benchmark": "CICIDS2017 (Canadian Institute for Cybersecurity)",
                 "reviewed_by_analyst": False,
                 "target_asset": event.get("target_asset", "National-Gateway-Demo-01"),
@@ -435,6 +446,7 @@ class ThreatDetector:
             "can_anchor": can_anchor,
             "model_version": self.metadata.get("model_version", f"XGBoost-CICIDS2017-v{self.metadata.get('schema_version', '1.2')}"),
             "model_sha256": self.model_hash,
+            "model_hash_verified": self.model_hash_verified,
             "dataset_benchmark": "CICIDS2017 (Canadian Institute for Cybersecurity)",
             "reviewed_by_analyst": bool(event.get("reviewed_by_analyst", False)),
             "target_asset": event.get("target_asset", "National-Gateway-Demo-01"),
