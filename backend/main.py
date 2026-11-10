@@ -109,7 +109,6 @@ LEDGER_INTEGRITY_STATUS = {"status": "VALID", "broken_id": None}
 LEDGER_INTEGRITY_ACKNOWLEDGED = False
 
 def is_ledger_integrity_acknowledged() -> bool:
-    global LEDGER_INTEGRITY_ACKNOWLEDGED
     try:
         val = get_system_flag("ledger_integrity_acknowledged", "0")
         if str(val).lower() in ("1", "true", "yes"):
