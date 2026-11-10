@@ -5,7 +5,8 @@ fastapi==0.141.1
 uvicorn[standard]==0.52.1
 pydantic==2.13.4
 pydantic-settings==2.15.0
-xgboost==3.4.1
+xgboost==3.4.1; python_version >= '3.12'
+xgboost==3.2.0; python_version < '3.12'
 scikit-learn==1.9.0
 pandas==3.0.3
 numpy==2.5.0
