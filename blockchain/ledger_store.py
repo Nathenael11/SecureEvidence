@@ -507,6 +507,59 @@ class SqliteLedgerStore(LedgerStore):
             finally:
                 conn.close()
 
+    def _seed_ledger_fixtures(self, conn):
+        """Seed pre-anchored ledger records and chain receipts if available."""
+        seed_candidates = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "seed_ledger.json"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "blockchain", "fixtures", "seed_ledger.json"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "seed_ledger.json"),
+        ]
+        seed_file = None
+        for p in seed_candidates:
+            if os.path.exists(p):
+                seed_file = p
+                break
+
+        if not seed_file:
+            return
+
+        try:
+            with open(seed_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            records = data.get("records", [])
+            for r in records:
+                if r.get("id") == 0:
+                    continue
+                conn.execute("""
+                    INSERT OR IGNORE INTO ledger_records (
+                        id, evidence_hash, raw_artifact_sha256, case_id, payload_canonical,
+                        model_sha256, officer_id, officer_signature, timestamp_utc,
+                        timestamp_kind, prev_hash, record_hash, status, superseded_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    r["id"], r["evidence_hash"], r.get("raw_artifact_sha256"), r.get("case_id"),
+                    r["payload_canonical"], r.get("model_sha256"), r["officer_id"],
+                    r.get("officer_signature"), r["timestamp_utc"], r.get("timestamp_kind", "internal"),
+                    r["prev_hash"], r["record_hash"], r.get("status", "active"), r.get("superseded_by")
+                ))
+
+            receipts = data.get("receipts", [])
+            for rc in receipts:
+                conn.execute("""
+                    INSERT OR IGNORE INTO chain_receipts (
+                        id, evidence_hash, tx_hash, block_number, block_hash, chain_id, contract_address, anchored_at, status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    rc.get("id"), rc.get("evidence_hash"), rc.get("tx_hash"),
+                    rc.get("block_number"), rc.get("block_hash"), rc.get("chain_id"),
+                    rc.get("contract_address"), rc.get("anchored_at"), rc.get("status")
+                ))
+            conn.commit()
+            print(f"[*] Successfully seeded {len(records)-1} ledger records from {seed_file}")
+        except Exception as e:
+            print(f"[!] Warning seeding ledger fixtures: {e}")
+
     def _create_genesis_block(self, conn: sqlite3.Connection):
         """Create block 0 (Genesis block) with 64 zeros as prev_hash."""
         genesis_payload = json.dumps(

@@ -1780,7 +1780,8 @@ async function handleStoreEvidence() {
         renderVerdict(data);
     } catch (err) {
         console.error("Evidence anchoring failed:", err);
-        const errMsg = err.message || "";
+        const rawMsg = err.message || "";
+        const errMsg = rawMsg.replace(/^Anchoring disabled:\s*/i, "");
         if (errMsg.includes("acknowledgment required") || errMsg.includes("TRUNCATED") || errMsg.includes("DISAGREEMENT")) {
             showToast(
                 `Anchoring disabled: ${errMsg}`,

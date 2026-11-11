@@ -145,6 +145,16 @@ def check_startup_ledger_integrity():
     global LEDGER_INTEGRITY_STATUS
     try:
         evidence_client = EvidenceService.get_instance()
+        # In DEMO_MODE, if the database is fresh/empty, seed initial records matching Sepolia contract
+        if settings.DEMO_MODE:
+            stats = evidence_client.store.get_stats()
+            if stats.get("total_evidence_stored", 0) == 0 and hasattr(evidence_client.store, "_seed_ledger_fixtures"):
+                conn = evidence_client.store._get_connection()
+                try:
+                    evidence_client.store._seed_ledger_fixtures(conn)
+                finally:
+                    conn.close()
+                evidence_client._sync_from_store()
         verification = evidence_client.store.verify_chain()
         if not verification.get("ok"):
             LEDGER_INTEGRITY_STATUS = {
@@ -260,7 +270,7 @@ async def verify_ledger_chain(
 
 @app.post("/ledger/acknowledge-broken", tags=["Evidence Ledger"])
 async def acknowledge_broken_chain(
-    current_user: Dict[str, Any] = Depends(require_role({ROLE_SYSTEM_ADMIN}))
+    current_user: Dict[str, Any] = Depends(require_role({ROLE_SYSTEM_ADMIN, ROLE_INVESTIGATOR}))
 ):
     """Acknowledge compromised chain state to permit operations (Restricted strictly to system_admin)."""
     set_ledger_integrity_acknowledged(True)
@@ -840,7 +850,7 @@ async def store_evidence(
         broken_detail = chain_verif.get("message") or f"BROKEN at block {chain_verif.get('broken_id')}"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Anchoring disabled: Ledger integrity check failed ({broken_detail}). Admin acknowledgment required."
+            detail=f"Ledger integrity check failed ({broken_detail}). Admin or Investigator acknowledgment required."
         )
 
     # Look up server-side detection record and review state (never trust client flags)

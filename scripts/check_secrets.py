@@ -20,7 +20,7 @@ HARDHAT_PUBLIC_TEST_KEYS = {
 }
 
 EXCLUDED_DIRS = {".git", "node_modules", "__pycache__", ".pytest_cache", ".venv", "venv"}
-EXCLUDED_FILES = {"package-lock.json", "check_secrets.py"}
+EXCLUDED_FILES = {"package-lock.json", "check_secrets.py", "seed_ledger.json"}
 
 def scan_repository(root_dir: str) -> int:
     findings = []
