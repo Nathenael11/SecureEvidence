@@ -254,7 +254,7 @@ SecureEvidence/
 ## Acknowledgments
 
 I would like to express my sincere gratitude and appreciation to:
-* **CyberTalent Program**: For organizing the summer camp program, inspiring this project, and providing an incredible environment for learning advanced cyber defense technologies.
+* **INSA**: For organizing the summer camp program, inspiring this project, and providing an incredible environment for learning advanced cyber defense technologies.
 * **Summer Camp Crew & Staff**: For their dedication, tireless coordination, and continuous support throughout the program.
 * **My Mentors**: A heartfelt thank you to **Mikiyas**, **Abreham**, **Inas**, **Hanamariam**, and **Selam** for their invaluable guidance, constructive critiques, and continuous mentorship across Artificial Intelligence, Big Data engineering, and Blockchain systems.
 
