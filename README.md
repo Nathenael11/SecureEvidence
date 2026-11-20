@@ -1,223 +1,239 @@
 # SecureEvidence
-### AI Threat Detection & Tamper-Evident Blockchain Evidence Ledger
+### AI Threat Detection & Tamper-Proof Blockchain Evidence Registry
 
-> **Note:** Student graduation prototype built during the INSA CyberTalent Summer Camp; not an official INSA product.
+> **Note:** Graduation project prototype built during the INSA CyberTalent Summer Camp. Developed by **Nathenael Ermias**.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Render-46E3B7.svg?style=flat&logo=render&logoColor=white)](https://secureevidence.onrender.com)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![XGBoost](https://img.shields.io/badge/XGBoost-2.0%2B-EB5424.svg)](https://xgboost.readthedocs.io/)
+[![XGBoost](https://img.shields.io/badge/XGBoost-3.4.1-EB5424.svg)](https://xgboost.readthedocs.io/)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.20-363636.svg?logo=solidity&logoColor=white)](https://soliditylang.org/)
-[![Ethereum](https://img.shields.io/badge/Ethereum-Hardhat-yellow.svg?logo=ethereum&logoColor=white)](https://hardhat.org/)
+[![Sepolia](https://img.shields.io/badge/Blockchain-Sepolia%20Testnet-627EEA.svg?logo=ethereum&logoColor=white)](https://sepolia.etherscan.io/address/0x2cD0b41b4F77d2BA99aD4c656dfC3c12e6712F4B)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Nathenael%20Ermias-0A66C2.svg?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/nathenael-ermias-753746428?utm_source=share_via&utm_content=profile&utm_medium=member_android)
 [![Author](https://img.shields.io/badge/Author-Nathenael%20Ermias-0B2A4A.svg)](mailto:nathenaelermias13@gmail.com)
 
 ---
 
-## Live Application
-You can test the deployed application directly in your browser:  
-**[https://secureevidence.onrender.com](https://secureevidence.onrender.com)**
+## Live Demo
 
-### Demo Access & Security:
-| Role | Username | Provisioning Mode | Operational Scope |
-| :--- | :--- | :--- | :--- |
-| **Investigator** | `demo_investigator` | Initialized at boot (`DEMO_MODE=true`) or via CLI | AI Threat Detection, TreeSHAP Feature Analysis, Blockchain Evidence Anchoring, Tamper Verification |
-| **Admin** | `demo_admin` | Initialized at boot (`DEMO_MODE=true`) or via CLI | Full System Administration, Audit Trail Inspection, Chain Recovery |
+You can try the live application right now in your browser:  
+👉 **[https://secureevidence.onrender.com](https://secureevidence.onrender.com)**
 
-> **Security Note:** In production, credentials are never baked into container images or published. Accounts are provisioned via `python -m backend.manage create-user`. When `DEMO_MODE=false`, the server refuses startup unless a secure `JWT_SECRET` is provided.
+### Demo Accounts
+The login page has quick-fill buttons so you can test both roles without typing credentials:
+
+| Role | Username | What you can test |
+| :--- | :--- | :--- |
+| **Investigator** | `demo_investigator` | Run AI threat detection, review TreeSHAP feature explanations, anchor evidence to the Sepolia blockchain, test tampering, and generate court certificates. |
+| **System Admin** | `demo_admin` | Inspect audit logs, check ledger health, and manage system settings. |
+
+*Active Smart Contract on Ethereum Sepolia Testnet:*  
+[`0x2cD0b41b4F77d2BA99aD4c656dfC3c12e6712F4B`](https://sepolia.etherscan.io/address/0x2cD0b41b4F77d2BA99aD4c656dfC3c12e6712F4B)
 
 ---
 
 ## Why I Built SecureEvidence
 
-When digital forensic teams investigate cyber incidents or seize compromised systems, they face a recurring challenge in court under electronic evidence and cybercrime legal frameworks (including Ethiopia's *Computer Crime Proclamation No. 958/2016* and *Electronic Signature Proclamation No. 1072/2018*):
+When digital forensics teams investigate cyber incidents, a common challenge in court is proving data integrity:
 
-> **"How does the court verify that the server logs, packet captures, and forensic artifacts weren't altered after being seized?"**
+> *"How can the court be certain that the log files, packet captures, and evidence were not modified after they were seized?"*
 
-Standard syslog files, text logs, and ordinary database records are easy to modify or delete. Defense attorneys can challenge digital evidence simply by pointing out that anyone with root access could have altered timestamps, IP addresses, or payload bytes.
+Standard server logs and regular database records can easily be edited or deleted by anyone with administrator access. Defense attorneys routinely challenge digital evidence by arguing that timestamps, IP addresses, or packet details could have been tampered with.
 
-**SecureEvidence** was built as a graduation project during the CyberTalent Summer Camp to address this challenge by combining three technologies into one workflow:
+I built **SecureEvidence** to solve this problem by connecting three pieces into a single, seamless workflow:
 
-1. **AI Threat Detection Engine**: Classifies incoming network flows into 12 distinct threat categories using an **XGBoost** model trained on benchmark **CICIDS2017** data. It uses **TreeSHAP** to show exactly *which* network metrics (packet rate, flow duration, window size) caused the model to trigger an alert.
-2. **Big Data Processing Layer**: Simulates real-time telemetry ingestion using **Apache Spark Structured Streaming** and Kafka event streams, aggregating 1-minute window metrics to handle high-volume traffic.
-3. **Cryptographic Blockchain Ledger**: When an investigator verifies a threat, the system computes a deterministic **SHA-256 canonical hash** of the forensic record and anchors it to an **Ethereum smart contract** (`EvidenceTracker.sol`) alongside a local hash-chained SQLite ledger.
+1. **AI Threat Detection**: An **XGBoost** model (trained on the benchmark **CICIDS2017** dataset) analyzes network traffic and classifies it across 12 threat types. It uses **TreeSHAP** to explain *why* it flagged the traffic (e.g. abnormal packet size, flow duration, or SYN flag patterns).
+2. **Cryptographic Sealing**: When an investigator verifies a threat, the system generates a deterministic **SHA-256 canonical hash** of the entire evidence record and signs it with an officer ECDSA digital signature.
+3. **Dual-Layer Immutability**:
+   - **Local SQLite Hash Chain**: Every record embeds the hash of the previous record (`prev_hash`), protected by database triggers that strictly reject any `DELETE` or `UPDATE` queries.
+   - **Public Ethereum Sepolia Blockchain**: The cryptographic fingerprints (`evidenceHash`, `rawArtifactHash`, `merkleRoot`) are anchored on-chain into a Solidity smart contract (`EvidenceTracker.sol`).
 
-
-
-If anyone modifies even a single byte of the evidence afterward, the recomputed hash fails to match the anchored record, immediately alerting the court to tampering.
+If anyone later changes even a single letter, number, or timestamp in the evidence file, the recalculated hash will not match the on-chain fingerprint, immediately exposing the tampering.
 
 ---
 
 ## System Architecture
 
 ```text
-                                +-----------------------------------------------+
-                                |     ETHIOPIAN CRITICAL INFRASTRUCTURE         |
-                                |  (Ethio Telecom, CBE, NBE, Gov Gateways)      |
-                                +-----------------------+-----------------------+
-                                                        | NetFlow / IP Flow Data
-                                                        v
-                                +-----------------------------------------------+
-                                |        1. BIG DATA INGESTION LAYER            |
-                                |       (Spark Structured Streaming)            |
-                                +-----------------------+-----------------------+
-                                                        | Flow Feature Extraction
-                                                        v
-                                +-----------------------------------------------+
-                                |        2. AI THREAT DETECTION ENGINE          |
-                                |      (XGBoost + TreeSHAP Explainability)      |
-                                +-----------------------+-----------------------+
-                                                        | Telemetry & Attribution
-                                                        v
-                                +-----------------------------------------------+
-                                |          3. BACKEND FORENSIC API              |
-                                |         (FastAPI & SHA-256 Engine)            |
-                                +-----------+-----------------------+-----------+
-                                            |                       |
-              Deterministic SHA-256 Digest  |                       | REST & WebSockets
-                                            v                       v
-        +-----------------------------------------------+   +-----------------------------------------------+
-        |     4. EVIDENCE BLOCKCHAIN & LEDGER           |   |          5. FORENSIC WEB CONSOLE              |
-        |  - Solidity Smart Contract (EVM / Hardhat)    |   |  - Real-Time AI Detection & TreeSHAP          |
-        |  - SQLite Verifiable Hash Chain               |   |  - One-Click Blockchain Anchoring             |
-        |  - Merkle Tree Proofs & ECDSA Signatures      |   |  - Interactive Tamper-Testing Engine          |
-        |  - Deterministic Canonical JSON Serialization      |   |  - Printable Federal Court Certificate        |
-        +-----------------------------------------------+   +-----------------------------------------------+
+       Incoming Network Traffic / Flow Telemetry
+                         │
+                         ▼
+        ┌───────────────────────────────────┐
+        │   1. Telemetry Ingestion Layer    │
+        │      (Validation & 77 Features)   │
+        └─────────────────┬─────────────────┘
+                          │
+                          ▼
+        ┌───────────────────────────────────┐
+        │    2. AI Threat Detection Engine   │
+        │   (XGBoost + TreeSHAP Explanation)│
+        └─────────────────┬─────────────────┘
+                          │
+                          ▼
+        ┌───────────────────────────────────┐
+        │      3. FastAPI Forensic API       │
+        │  (SHA-256 Digest & ECDSA Signing) │
+        └─────────┬───────────────────┬─────┘
+                  │                   │
+         Canonical Hash         JSON Payloads
+                  │                   │
+                  ▼                   ▼
+    ┌─────────────────────────┐  ┌─────────────────────────┐
+    │  4. Dual Evidence Store │  │  5. Forensic Web UI     │
+    │  - SQLite Hash Chain    │  │  - Real-time Detection  │
+    │  - Sepolia Smart Contract│ │  - 1-Click Anchoring    │
+    │  - On-Chain Head Anchors│  │  - Interactive Tamperer │
+    │  (Immutable & Verifiable)  │  - Official Certificate │
+    └─────────────────────────┘  └─────────────────────────┘
 ```
 
 ---
 
-## Core Capabilities
+## Key Features
 
-### 1. AI Threat Detection (`ai_engine/`)
-* **Benchmark Dataset**: Trained on the Canadian Institute for Cybersecurity **CICIDS2017** dataset.
-* **12 Threat Classes**: Classifies complex volumetric floods (DDoS, DoS Hulk), service discovery (PortScan), command & control (Botnet), credential abuse (SSH-Patator, Web Brute Force), application exploits (SQL Injection), and baseline BENIGN traffic.
-* **Explainable AI (TreeSHAP)**: Rather than giving a blind score, the console breaks down the top mathematical drivers of each decision (e.g. forward packet volume, inter-arrival time mean, TCP SYN flags).
-* **Coverage Safeguard**: If telemetry contains fewer than 60% of expected flow parameters, the engine flags `INSUFFICIENT_DATA` rather than making blind assumptions. When telemetry satisfies the 60% threshold, unobserved secondary features (up to 40%) are baseline-imputed (0.0/median) while reporting exact coverage and missing feature details in the forensic attestation.
+### 1. AI Threat Detection & Explainability (`ai_engine/`)
+- **Trained on CICIDS2017**: Detects 12 attack categories including DDoS, DoS Hulk, PortScan, Botnets, SSH-Patator, Web Attacks (SQL Injection / XSS), and normal Benign traffic.
+- **TreeSHAP Explainability**: Rather than giving an unexplained prediction score, the UI highlights the top network parameters (e.g., flow inter-arrival times, packet length variance, header length) that drove the classification.
+- **Data Quality Safeguard**: Telemetry must contain at least 60% valid flow parameters; incomplete vectors are safely flagged rather than guessed.
+- **Model Training Pipeline**: Includes `ai_engine/train.py` to retrain, scale, and evaluate models from scratch.
 
-### 2. Blockchain & Cryptographic Sealing (`blockchain/`)
-* **Smart Contract (`contracts/EvidenceTracker.sol`)**: Solidity contract providing role-based access control, SHA-256 Merkle root verification, and emitted event logs (`EvidenceStored`, `EvidenceVerified`).
-* **Dual-Layer Storage**:
-  * **On-Chain**: Anchors root hashes to the Ethereum/Hardhat blockchain.
-  * **Local Verifiable Ledger**: SQLite database with append-only triggers and a cryptographic hash chain where each block embeds `prev_hash`, chaining back to genesis.
-* **Officer Non-Repudiation**: Digital signatures generated via SECP256R1 ECDSA to cryptographically tie each piece of evidence to the investigating officer.
-* **Tamper Proofing**: Modifying any field (source IP, timestamp, flow bytes) immediately breaks the chain and produces a red mismatch alert.
+### 2. Blockchain & Hash-Chained Evidence Ledger (`blockchain/`)
+- **Sepolia Smart Contract (`EvidenceTracker.sol`)**: Stores 32-byte cryptographic fingerprints on Ethereum testnet with role-based access (`ADMIN_ROLE`, `ANALYST_ROLE`, `AUDITOR_ROLE`).
+- **Privacy-Preserving (Hashes Only)**: Sensitive raw payloads, internal IP addresses, and private telemetry stay local; only cryptographic digests are placed on the blockchain.
+- **Local SQLite Hash Chain**: Local records are linked sequentially from Genesis block `#0` to the latest head. SQLite triggers permanently forbid editing or deleting entries.
+- **Officer Non-Repudiation**: Evidence submissions are signed using ECDSA key pairs tied to the investigating officer's identity.
 
-### 3. Big Data Processing (`big_data/`)
-* **Spark Structured Streaming**: Streams raw network telemetry through schema validation and vectorization pipelines.
-* **Sliding Window Analytics**: Tracks 1-minute throughput, packet rates, and anomaly distributions in real time.
-* **Traffic Replay**: Replays held-out CICIDS2017 flow streams for live, realistic testing.
+### 3. Interactive Tamper Verification (`frontend/`)
+- **Live Tamper Testing**: An integrated JSON editor lets investigators or evaluators change a byte or timestamp and click "Verify". The engine immediately detects the cryptographic mismatch and shows a side-by-side diff.
+- **Public Verifier**: Allows anyone with a case JSON or SHA-256 hash to independently verify evidence authenticity without needing a login.
 
-### 4. Forensic Analyst Console (`frontend/`)
-* **Visual Design**: Professional Navy & Steel design system (#0B2A4A, #1F6FB2, #F3F6FA).
-* **Interactive Tamper Testing**: An integrated JSON editor lets investigators test what happens when a single byte is changed, showing the immediate cryptographic avalanche effect.
-* **Federal Court Certificates**: Generates official, exportable, and printable **FDRE Federal High Court Digital Evidence Certificates** referencing Ethiopian Proclamations.
+### 4. Court-Admissible Evidence Certificate
+- Generates an official, printable **Digital Evidence Certificate** with:
+  - Complete chain of custody and officer credentials.
+  - SHA-256 hashes for the evidence and raw telemetry.
+  - Live Sepolia transaction hash and block number with clickable Etherscan links.
+  - Statutory references to Ethiopian cybercrime legislation (*Computer Crime Proclamation No. 958/2016*).
+
+### 5. Big Data Streaming Simulation (`big_data/`)
+- Simulates real-time telemetry streaming using Spark Structured Streaming and sliding 1-minute window metrics.
 
 ---
 
-## Platform Walkthrough & Screenshots
+## Screenshots
 
-### 1. Role-Based Access Control & Authentication
-Clean role separation allowing investigators to inspect and anchor evidence while administrators manage audit trails and governance. Includes quick-fill buttons for demonstration.
+### 1. Role-Based Access Control
+Separate roles for investigators and system administrators with quick-login buttons for demonstration.
 ![Role-Based Authentication](docs/screenshots/01_role_based_access.png)
 
 ---
 
-### 2. AI Threat Triage & TreeSHAP Feature Explainability
-Multi-class XGBoost classifier evaluating network flow telemetry with real-time TreeSHAP attributions showing the exact statistical features driving the threat classification.
+### 2. Threat Triage & TreeSHAP Feature Explainability
+XGBoost threat classification with real-time TreeSHAP attributions showing the exact statistical features driving the alert.
 ![AI Threat Triage and Explainability](docs/screenshots/02_threat_triage_and_explainability.png)
 
 ---
 
-### 3. Blockchain & Cryptographic Evidence Anchoring
-Digital evidence sealing using deterministic SHA-256 canonical hashing, Merkle tree proofs, and officer ECDSA digital signatures anchored to the EVM smart contract and verifiable hash-chain ledger.
+### 3. Blockchain Evidence Anchoring
+Anchoring forensic evidence hashes to the live Sepolia smart contract and local hash-chained ledger.
 ![Blockchain Evidence Anchoring](docs/screenshots/03_blockchain_evidence_anchoring.png)
 
 ---
 
-### 4. High-Throughput Big Data Streaming Pipeline
-Telemetry processing architecture running Apache Spark Structured Streaming with 1-minute sliding window aggregations and live anomaly scoring.
+### 4. Big Data Streaming Pipeline
+Simulated high-throughput telemetry ingestion with 1-minute sliding window metrics and live threat monitoring.
 ![Big Data Streaming Telemetry](docs/screenshots/04_big_data_streaming_pipeline.png)
 
 ---
 
-### 5. Cryptographic Tamper Detection & Avalanche Rejection
-The built-in verification engine proves non-repudiation: modifying even a single byte or packet metric in the seized evidence instantly causes a cryptographic hash mismatch.
+### 5. Cryptographic Tamper Detection
+Modifying even a single character in the seized evidence instantly causes a cryptographic hash mismatch, catching tampering on the spot.
 ![Cryptographic Tamper Detection](docs/screenshots/05_cryptographic_tamper_detection.png)
 
 ---
 
-### 6. FDRE Federal High Court Digital Evidence Certificate
-Official court certificate generator providing judicial authorities with verifiable chain-of-custody records, transaction hashes, and statutory citations under Ethiopian Proclamation No. 958/2016.
-![Federal High Court Evidence Certificate](docs/screenshots/06_court_evidence_certificate.png)
+### 6. Official Court Evidence Certificate
+Court-ready forensic certificate complete with case details, cryptographic hashes, and clickable on-chain Etherscan verification links.
+![Court Evidence Certificate](docs/screenshots/06_court_evidence_certificate.png)
 
 ---
 
-## Production Considerations & Future Roadmap
+## Local Setup & Installation
 
-While SecureEvidence is a fully functional end-to-end prototype, scaling it from an evaluation testbed to a nationwide operational deployment across judiciary and forensic depositories involves specific technical boundaries. Here is an honest breakdown of current design constraints and how each will be addressed in future phases:
+### Prerequisites
+- Python 3.12 (or 3.11+)
+- Node.js 18+ (for running smart contract tests)
+- Git
 
-| Component | Current Prototype Design | Planned Production Solution (Roadmap) |
-| :--- | :--- | :--- |
-| **Officer Key Custody** | Officer ECDSA P-256 key pairs are generated and managed within the application layer for demo convenience. | **Hardware Security Modules (HSM) & Smart Cards**: In production, investigator private keys will be held in FIPS 140-2 Level 3 HSMs or government-issued PKI smart cards, with client-side signing so no private keys ever touch the central server. |
-| **Timestamp Authority** | Uses an internal server timestamp authority (`blockchain/local_timestamp.py`), which is cryptographically hashed but reliant on server clock time. | **Accredited RFC 3161 TSA**: Integration with an accredited National Root Public Key Infrastructure (NPKI) or licensed Trust Service Provider (TSP) for legally certified, externally verifiable timestamps. |
-| **Consortium Blockchain** | Operates on a local Hardhat EVM node (port 8545) or public Ethereum testnet (Sepolia) alongside a local SQLite hash chain. | **Sovereign Consortium Network**: Deployment on a private, permissioned Ethereum IBFT 2.0 or Hyperledger Besu consortium with validator nodes distributed across INSA, the Federal High Court, and MInT. |
-| **Telemetry Privacy** | Raw flow statistics are evaluated in application host memory during AI inference. | **Confidential Computing & Zero-Knowledge Proofs (zk-SNARKs)**: Running models inside secure enclaves (Intel SGX / AMD SEV) and using zk-SNARKs so defense counsel can verify evidence validity without exposing sensitive national infrastructure IP addresses. |
-| **Sensor Ingestion Depth** | Requires complete 77-feature NetFlow/IPFIX vectors (basic sensor logs like standard Suricata flows trip the 60% coverage gate and require manual review). | **Kernel-Level eBPF Probes**: Deploying lightweight eBPF / XDP network probes at institutional gateways to natively extract all 77 statistical flow metrics directly at line rate. |
-| **User Authentication** | bcrypt (12 rounds) password hashing with account lockout, rate limiting, and JWT token rotation. | **FIDO2 / WebAuthn & MFA**: Implementing hardware-backed biometric security keys and TOTP multi-factor authentication for all forensic roles. |
-
----
-
-## Quick Start (Local Setup)
-
-### 1. Clone & Set Up Environment
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/Nathenael11/SecureEvidence.git
 cd SecureEvidence
+```
 
-# Create and activate virtual environment
+### 2. Set Up Python Environment
+```bash
+# Create virtual environment
 python -m venv venv
-# On Windows:
+
+# Activate on Windows:
 .\venv\Scripts\activate
-# On Linux/macOS:
+
+# Activate on Linux/macOS:
 source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Run Application
+### 3. Install Smart Contract Dependencies
 ```bash
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+npm install
 ```
-Open your browser at **http://localhost:8000**.
 
-### 3. Run Automated Tests
+### 4. Run the Application
 ```bash
-# Python Backend & AI Tests
+# Using uvicorn:
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Or on Windows using the batch script:
+.\run_web.bat
+```
+Open **http://localhost:8000** in your browser.
+
+---
+
+## Running Automated Tests
+
+The project includes thorough test suites covering AI inference, cryptographic hashing, API endpoints, and smart contracts:
+
+```bash
+# Run all Python backend & AI tests (83 tests)
 pytest tests/ -v
 
-# Blockchain Smart Contract Tests
-cd blockchain && npx hardhat test
+# Run Solidity smart contract tests (18 tests)
+npx hardhat test
+
+# Run secrets safety scanner
+python scripts/check_secrets.py
 ```
 
 ---
 
-## REST API Reference
+## REST API Summary
 
-| Method | Endpoint | Access Role | Description |
+| Method | Endpoint | Access | Purpose |
 |:---|:---|:---|:---|
-| `POST` | `/auth/login` | Public | Authenticates credentials, issues JWT access token + refresh cookie |
-| `POST` | `/detect` | Investigator, Admin | Evaluates network telemetry with XGBoost & TreeSHAP |
-| `POST` | `/evidence/store` | Investigator, Admin | Anchors evidence hash and Merkle root to blockchain/ledger |
-| `POST` | `/evidence/verify` | Authenticated | Validates integrity against ledger with byte-level diff |
-| `POST` | `/evidence/verify-public` | Public | External verification of raw evidence JSON or SHA-256 hash |
+| `POST` | `/auth/login` | Public | Authenticates credentials and returns JWT access token |
+| `POST` | `/detect` | Investigator, Admin | Evaluates network telemetry with XGBoost and TreeSHAP |
+| `POST` | `/evidence/store` | Investigator, Admin | Anchors evidence hash to Sepolia blockchain & local SQLite ledger |
+| `POST` | `/evidence/verify` | Authenticated | Checks evidence integrity against the ledger with a byte-level diff |
+| `POST` | `/evidence/verify-public` | Public | Allows external verification of evidence JSON or hash |
 | `GET` | `/evidence` | Authenticated | Lists all anchored forensic records |
-| `GET` | `/cases/{case_id}` | Authenticated | Returns chain of custody for an investigation |
+| `GET` | `/cases/{case_id}` | Authenticated | Retrieves the complete chain of custody for a case |
 | `GET` | `/stats` | Authenticated | Returns operational statistics and ledger health |
-| `GET` | `/health` | Public | System status and active ledger diagnostic checks |
+| `GET` | `/health` | Public | Health check and cached ledger integrity status |
 
-*Full interactive OpenAPI documentation is available at `/docs`.*
+*Interactive Swagger documentation is available at `/docs` when the app is running.*
 
 ---
 
@@ -225,50 +241,66 @@ cd blockchain && npx hardhat test
 
 ```text
 SecureEvidence/
-├── ai_engine/                      # Machine learning models, XGBoost inference & TreeSHAP
-│   ├── detector.py                 # Core detection engine & MITRE mapping
-│   ├── flow_preprocessor.py        # 77-feature extraction & coverage gating
-│   ├── models/                     # Serialized XGBoost model, scaler & metadata
-│   └── threat_detection.ipynb      # Complete EDA & training notebook
-├── backend/                        # FastAPI REST API & security layer
-│   ├── main.py                     # API routing, CORS & static files
-│   ├── security.py                 # JWT authentication & RBAC matrix
-│   ├── schemas.py                  # Pydantic data schemas
-│   └── services/                   # Detection, Evidence & STIX 2.1 services
-├── big_data/                       # Spark Structured Streaming pipeline
-├── blockchain/                     # EVM smart contracts & cryptographic ledger
-│   ├── contracts/EvidenceTracker.sol # Solidity smart contract
-│   ├── ledger_store.py             # SQLite cryptographic hash-chain engine
-│   ├── merkle_tree.py              # SHA-256 Merkle root implementation
-│   └── web3_client.py              # Web3 Ethereum client & local simulator
-├── frontend/                       # Forensic Web Console (HTML, CSS, JS)
-├── tests/                          # Automated Pytest & Hardhat test suites
-├── Dockerfile                      # Production container configuration
-├── render.yaml                     # Render Cloud deployment blueprint
-├── requirements.txt                # Python dependencies
-└── README.md                       # Project documentation
+├── ai_engine/                         # AI detection, models & training
+│   ├── detector.py                    # XGBoost inference & TreeSHAP attributions
+│   ├── flow_preprocessor.py           # Feature extraction & coverage checks
+│   ├── train.py                       # End-to-end model training script
+│   └── models/                        # Serialized model, scaler, and metadata
+├── backend/                           # FastAPI backend
+│   ├── main.py                        # API routes, CORS & application lifecycle
+│   ├── config.py                      # Application settings & environment parsing
+│   ├── security.py                    # Password hashing (bcrypt) & JWT verification
+│   ├── user_store.py                  # User authentication store & rate limiting
+│   ├── schemas.py                     # Pydantic request/response schemas
+│   └── services/                      # Detection, Evidence, and Certificate services
+├── big_data/                          # Spark Structured Streaming simulation
+├── blockchain/                        # Smart contracts & cryptographic ledger
+│   ├── contracts/EvidenceTracker.sol  # Solidity smart contract
+│   ├── ledger_store.py                # SQLite hash chain with immutability triggers
+│   ├── web3_client.py                 # Sepolia / Hardhat Web3 client
+│   ├── merkle_tree.py                 # Merkle tree batching
+│   ├── digital_signature.py           # SECP256R1 ECDSA officer signatures
+│   └── fixtures/seed_ledger.json      # Pre-anchored Sepolia ledger records
+├── frontend/                          # Web UI (HTML, CSS, Vanilla JS)
+├── deployments/                       # Contract deployment records (Sepolia / Local)
+├── docs/                              # Screenshots & benchmark documentation
+├── scripts/                           # Deploy, test, and verification helper scripts
+├── tests/                             # Pytest test suite & fixtures
+├── hardhat.config.js                  # Hardhat configuration
+├── Dockerfile                         # Container build file
+├── render.yaml                        # Render Cloud deployment blueprint
+└── requirements.txt                   # Pinned Python dependencies
 ```
+
+---
+
+## Current Prototype Scope & Next Steps
+
+This project is a functional graduation prototype. While it delivers an end-to-end working system, here is an honest look at its current design choices and how they could be improved for production:
+
+1. **Investigator Key Storage**: In this prototype, demo officer ECDSA keys are simulated in software. In a production government deployment, investigator private keys would be stored on hardware tokens (FIPS 140-2 smart cards) so keys never touch the web server.
+2. **Blockchain Network**: The prototype anchors to the public Ethereum Sepolia testnet, which is great for open evaluation. A production judiciary system would typically deploy on a private consortium blockchain run between partner institutions (e.g. INSA, courts, and telecom providers).
+3. **Certified Timestamping**: Timestamps currently use cryptographic internal server time. Future iterations could integrate an accredited RFC 3161 national Time Stamping Authority (TSA).
 
 ---
 
 ## Acknowledgments
 
-I would like to express my sincere gratitude and appreciation to:
-* **INSA**: For organizing the summer camp program, inspiring this project, and providing an incredible environment for learning advanced cyber defense technologies.
-* **Summer Camp Crew & Staff**: For their dedication, tireless coordination, and continuous support throughout the program.
-* **My Mentors**: A heartfelt thank you to **Mikiyas**, **Abreham**, **Inas**, **Hanamariam**, and **Selam** for their invaluable guidance, constructive critiques, and continuous mentorship across Artificial Intelligence, Big Data engineering, and Blockchain systems.
+I would like to express my sincere gratitude to:
+- **INSA & The CyberTalent Program**: For organizing the summer camp and creating an incredible environment for learning advanced cyber defense and software engineering.
+- **Summer Camp Coordinators & Staff**: For their hard work, dedication, and support throughout the program.
+- **My Mentors**: A heartfelt thank you to **Mikiyas**, **Abreham**, **Inas**, **Hanamariam**, and **Selam** for their invaluable guidance, critiques, and continuous advice across AI, Big Data, and Blockchain systems.
 
 ---
 
-## Author & Contact
+## Author
 
-**Nathenael Ermias**
-* **Specialization**: AI Engineering, Big Data & Blockchain
-* **LinkedIn**: [Nathenael Ermias on LinkedIn](https://www.linkedin.com/in/nathenael-ermias-753746428?utm_source=share_via&utm_content=profile&utm_medium=member_android)
-* **Email**: [nathenaelermias13@gmail.com](mailto:nathenaelermias13@gmail.com)
-* **GitHub**: [@Nathenael11](https://github.com/Nathenael11)
+**Nathenael Ermias**  
+- **LinkedIn**: [Nathenael Ermias](https://www.linkedin.com/in/nathenael-ermias-753746428?utm_source=share_via&utm_content=profile&utm_medium=member_android)  
+- **Email**: [nathenaelermias13@gmail.com](mailto:nathenaelermias13@gmail.com)  
+- **GitHub**: [@Nathenael11](https://github.com/Nathenael11)
 
 ---
 
-## Legal & Regulatory Disclaimer
-*Determination of evidence admissibility in criminal or civil proceedings is the exclusive judicial prerogative of the presiding judge. SecureEvidence provides technical supporting evidence of data integrity, chain of custody, and cryptographic non-repudiation referencing FDRE Computer Crime Proclamation (No. 958/2016) and Electronic Signature Proclamation (No. 1072/2018) (statutory weight to be evaluated by legal counsel).*
+## Disclaimer
+*This project was developed for academic, research, and demonstration purposes as part of the INSA CyberTalent graduation program. It provides technical proof of data integrity under relevant electronic evidence principles.*
